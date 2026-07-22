@@ -25,6 +25,10 @@ import TerminalPanel from "../../components/dashboard/TerminalPanel/TerminalPane
 
 import useTelemetry from "../../hooks/useTelemetry";
 import useAlerts from "../../hooks/useAlerts";
+import {
+  findAlertByIdentity,
+  OPERATIONAL_FOCUS_TYPES,
+} from "../../utils/operationalIdentity";
 
 function Dashboard() {
   const telemetryLogs = useTelemetry();
@@ -36,7 +40,19 @@ function Dashboard() {
   const focusType = searchParams.get("focus");
   const focusId = searchParams.get("id");
 
+  const focusedAlert = useMemo(() => {
+    if (focusType !== OPERATIONAL_FOCUS_TYPES.ALERT || !focusId) {
+      return null;
+    }
+
+    return findAlertByIdentity(alerts, focusId);
+  }, [alerts, focusType, focusId]);
+
   const canonicalSelectedAlert = useMemo(() => {
+    if (focusedAlert) {
+      return focusedAlert;
+    }
+
     if (!selectedAlert) {
       return null;
     }
@@ -54,7 +70,7 @@ function Dashboard() {
         return alertId && String(alertId) === String(selectedAlertId);
       }) ?? selectedAlert
     );
-  }, [alerts, selectedAlert]);
+  }, [alerts, focusedAlert, selectedAlert]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -82,28 +98,35 @@ function Dashboard() {
   }, []);
 
   useEffect(() => {
-    const supportedFocusTypes = new Set(["scan", "finding", "mission"]);
+    const supportedFocusTypes = new Set(Object.values(OPERATIONAL_FOCUS_TYPES));
 
     if (!focusType || !focusId || !supportedFocusTypes.has(focusType)) {
       return;
     }
 
+    const sectionId =
+      focusType === OPERATIONAL_FOCUS_TYPES.ALERT
+        ? "dashboard-alerts"
+        : "dashboard-operations";
+
     window.dispatchEvent(
       new CustomEvent("dashboard:section-focus", {
         detail: {
-          sectionId: "dashboard-operations",
+          sectionId,
         },
       }),
     );
 
     /*
-    Scan focus is handled precisely by RecentScansPanel.
+      Scan and alert focus are handled precisely by their respective panels.
 
-    Do not also scroll the entire Operations workspace, because that
-    competes with the exact scan-row focus and can leave the user at
-    the top of Operations instead of at the selected scan.
-  */
-    if (focusType === "scan") {
+      Do not also scroll the entire workspace, because that would compete
+      with exact entity focus.
+    */
+    if (
+      focusType === OPERATIONAL_FOCUS_TYPES.SCAN ||
+      focusType === OPERATIONAL_FOCUS_TYPES.ALERT
+    ) {
       return;
     }
 
@@ -155,6 +178,8 @@ function Dashboard() {
           <AlertOperationsSection
             selectedAlert={canonicalSelectedAlert}
             onSelectAlert={setSelectedAlert}
+            focusType={focusType}
+            focusId={focusId}
           />
 
           <AlertDetailsPanel alert={canonicalSelectedAlert} />

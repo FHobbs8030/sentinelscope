@@ -4,6 +4,11 @@ import { useNavigate } from "react-router-dom";
 import "./ScanOperationsSection.css";
 
 import useScans from "../../../hooks/useScans";
+import {
+  getStableScanId,
+  scanMatchesIdentity,
+} from "../../../utils/operationalIdentity";
+
 import scanEventBus, {
   SCAN_EVENTS,
 } from "../../../services/runtime/scanEventBus";
@@ -11,24 +16,8 @@ import scanEventBus, {
 const MOBILE_SCAN_LIMIT = 10;
 const NEW_SCAN_FOCUS_DURATION_MS = 7000;
 
-const scanMatchesIdentity = (scan, scanId) => {
-  if (!scan || !scanId) {
-    return false;
-  }
-
-  return [scan.id, scan.clientScanId, scan.scanId, scan._id]
-    .filter(Boolean)
-    .some((identity) => String(identity) === String(scanId));
-};
-
-const getStableScanId = (scan) => {
-  return scan?.clientScanId || scan?.scanId || scan?._id || scan?.id || null;
-};
-
 const getStableScanKey = (scan, index) => {
-  return (
-    scan.clientScanId || scan.scanId || scan._id || scan.id || `scan-${index}`
-  );
+  return getStableScanId(scan) || `scan-${index}`;
 };
 
 function RecentScansPanel({ focusType, focusId }) {

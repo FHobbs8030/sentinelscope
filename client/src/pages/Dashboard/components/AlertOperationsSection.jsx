@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import "./AlertOperationsSection.css";
+import {
+  alertMatchesIdentity,
+  OPERATIONAL_FOCUS_TYPES,
+} from "../../../utils/operationalIdentity";
 
 import useAlerts from "../../../hooks/useAlerts";
 
@@ -62,9 +66,21 @@ const getShortId = (alert) => {
   return `…${normalizedId.slice(-8)}`;
 };
 
-function AlertOperationsSection({ selectedAlert, onSelectAlert }) {
+function AlertOperationsSection({
+  selectedAlert,
+  onSelectAlert,
+  focusType,
+  focusId,
+}) {
   const [copiedAlertId, setCopiedAlertId] = useState(null);
   const copyTimerRef = useRef(null);
+  const alertListRef = useRef(null);
+  const handledFocusIdRef = useRef(null);
+
+  const externalFocusedAlertId =
+    focusType === OPERATIONAL_FOCUS_TYPES.ALERT && focusId
+      ? String(focusId)
+      : null;
 
   const {
     alerts,
@@ -79,46 +95,100 @@ function AlertOperationsSection({ selectedAlert, onSelectAlert }) {
     close,
   } = useAlerts();
 
-    useEffect(() => {
-      return () => {
-        if (copyTimerRef.current) {
-          window.clearTimeout(copyTimerRef.current);
-        }
-      };
-    }, []);
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (
+      !externalFocusedAlertId ||
+      handledFocusIdRef.current === externalFocusedAlertId
+    ) {
+      return;
+    }
+
+    const matchingAlert = alerts.find((alert) =>
+      alertMatchesIdentity(alert, externalFocusedAlertId),
+    );
+
+    if (!matchingAlert) {
+      return;
+    }
+
+    const focusTarget = alertListRef.current?.querySelector(
+      '[data-alert-focus="true"]',
+    );
+
+    if (!focusTarget) {
+      return;
+    }
+
+    handledFocusIdRef.current = externalFocusedAlertId;
+
+    const prefersReducedMotion =
+      document.documentElement.dataset.motion === "reduced" ||
+      (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ??
+        false);
+
+    focusTarget.scrollIntoView({
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+      block: "center",
+    });
+  }, [alerts, externalFocusedAlertId]);
 
   const allActiveAlerts = alerts.filter((alert) => alert.status !== "closed");
 
-  const visibleAlerts = allActiveAlerts.slice(0, 12);
+  const focusedAlert = externalFocusedAlertId
+    ? (alerts.find((alert) =>
+        alertMatchesIdentity(alert, externalFocusedAlertId),
+      ) ?? null)
+    : null;
+
+  const baseVisibleAlerts = allActiveAlerts.slice(0, 12);
+
+  const focusedAlertAlreadyVisible =
+    focusedAlert &&
+    baseVisibleAlerts.some((alert) =>
+      alertMatchesIdentity(alert, externalFocusedAlertId),
+    );
+
+  const visibleAlerts =
+    focusedAlert && !focusedAlertAlreadyVisible
+      ? [focusedAlert, ...baseVisibleAlerts].slice(0, 12)
+      : baseVisibleAlerts;
 
   const retryLoad = () => {
     void refreshAlerts();
   };
 
-    const copyAlertId = async (event, alertId) => {
-      event.stopPropagation();
+  const copyAlertId = async (event, alertId) => {
+    event.stopPropagation();
 
-      if (!alertId || !navigator.clipboard) {
-        return;
+    if (!alertId || !navigator.clipboard) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(String(alertId));
+
+      setCopiedAlertId(String(alertId));
+
+      if (copyTimerRef.current) {
+        window.clearTimeout(copyTimerRef.current);
       }
 
-      try {
-        await navigator.clipboard.writeText(String(alertId));
-
-        setCopiedAlertId(String(alertId));
-
-        if (copyTimerRef.current) {
-          window.clearTimeout(copyTimerRef.current);
-        }
-
-        copyTimerRef.current = window.setTimeout(() => {
-          setCopiedAlertId(null);
-          copyTimerRef.current = null;
-        }, 1800);
-      } catch (copyError) {
-        console.error("Unable to copy alert ID:", copyError);
-      }
-    };
+      copyTimerRef.current = window.setTimeout(() => {
+        setCopiedAlertId(null);
+        copyTimerRef.current = null;
+      }, 1800);
+    } catch (copyError) {
+      console.error("Unable to copy alert ID:", copyError);
+    }
+  };
 
   const selectAlert = (alert) => {
     onSelectAlert(alert);
@@ -296,11 +366,13 @@ function AlertOperationsSection({ selectedAlert, onSelectAlert }) {
         </div>
       ) : null}
 
-      <div className="alert-operations-list">
+      <div className="alert-operations-list" ref={alertListRef}>
         {visibleAlerts.map((alert) => {
           const alertId = getAlertId(alert);
           const selectedAlertId = getAlertId(selectedAlert);
-
+          const isFocusedAlert =
+            externalFocusedAlertId &&
+            alertMatchesIdentity(alert, externalFocusedAlertId);
           const isSelected =
             alertId &&
             selectedAlertId &&
@@ -313,6 +385,7 @@ function AlertOperationsSection({ selectedAlert, onSelectAlert }) {
           return (
             <article
               key={alertId || `${alert.target}-${alert.title}`}
+              data-alert-focus={isFocusedAlert ? "true" : undefined}
               className={[
                 "alert-operations-card",
                 getCardSeverityClass(alert.severity),
@@ -473,7 +546,7 @@ function AlertOperationsSection({ selectedAlert, onSelectAlert }) {
           );
         })}
 
-        {hasLoaded && allActiveAlerts.length === 0 ? (
+        {hasLoaded && visibleAlerts.length === 0 ? (
           <div className="alert-operations-empty">
             <span className="alert-operations-empty__icon" aria-hidden="true">
               ✓

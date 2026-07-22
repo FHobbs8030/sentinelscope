@@ -6,6 +6,13 @@ import useFindings from "../../../hooks/useFindings";
 import useMissions from "../../../hooks/useMissions";
 import useAlerts from "../../../hooks/useAlerts";
 
+import {
+  buildFocusUrl,
+  getStableFindingId,
+  getStableMissionId,
+  getStableScanId,
+} from "../../../utils/operationalIdentity";
+
 import SearchResultsModal from "../../Search/SearchResultsModal";
 
 import "./Topbar.css";
@@ -78,7 +85,7 @@ function Topbar({ onMenuToggle, sidebarOpen }) {
             .includes(query),
         )
         .map((scan) => ({
-          id: scan.clientScanId || scan.scanId || scan._id || scan.id,
+          id: getStableScanId(scan),
           type: "scan",
           title: scan.name,
           subtitle: scan.target,
@@ -99,7 +106,7 @@ function Topbar({ onMenuToggle, sidebarOpen }) {
             .includes(query),
         )
         .map((finding) => ({
-          id: finding.clientFindingId || finding._id || finding.id,
+          id: getStableFindingId(finding),
           type: "finding",
           title: finding.title,
           subtitle: finding.target,
@@ -115,11 +122,7 @@ function Topbar({ onMenuToggle, sidebarOpen }) {
             .includes(query),
         )
         .map((mission) => ({
-          id:
-            mission.clientMissionId ||
-            mission.missionId ||
-            mission._id ||
-            mission.id,
+          id: getStableMissionId(mission),
           type: "mission",
           title: mission.name,
           subtitle: mission.target,
@@ -238,14 +241,9 @@ function Topbar({ onMenuToggle, sidebarOpen }) {
       return;
     }
 
-    const params = new URLSearchParams({
-      focus: item.type,
-      id: String(item.id),
-    });
-
     setShowSearchResults(false);
 
-    navigate(`/?${params.toString()}`);
+    navigate(buildFocusUrl(item.type, item.id));
 
     window.requestAnimationFrame(() => {
       document.getElementById("dashboard-operations")?.scrollIntoView({
