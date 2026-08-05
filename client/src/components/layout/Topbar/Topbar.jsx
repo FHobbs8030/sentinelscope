@@ -5,6 +5,7 @@ import useScans from "../../../hooks/useScans";
 import useFindings from "../../../hooks/useFindings";
 import useMissions from "../../../hooks/useMissions";
 import useAlerts from "../../../hooks/useAlerts";
+import useBackendHealth from "../../../hooks/useBackendHealth";
 
 import {
   buildFocusUrl,
@@ -20,6 +21,7 @@ import "./Topbar.css";
 function Topbar({ onMenuToggle, sidebarOpen }) {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
+  const [isManualBackendRefresh, setIsManualBackendRefresh] = useState(false);
 
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -64,6 +66,42 @@ function Topbar({ onMenuToggle, sidebarOpen }) {
     loading: alertsLoading,
     error: alertsError,
   } = useAlerts();
+
+  const {
+    health: backendHealth,
+    isChecking: backendIsChecking,
+    isOnline: backendIsOnline,
+    isOffline: backendIsOffline,
+    error: backendError,
+    lastCheckedAt: backendLastCheckedAt,
+    refresh: refreshBackendHealth,
+  } = useBackendHealth();
+
+  const backendIndicatorState = isManualBackendRefresh
+    ? "checking"
+    : backendIsOnline
+      ? "online"
+      : backendIsOffline
+        ? "offline"
+        : "checking";
+
+  const backendStatusLabel = isManualBackendRefresh
+    ? "Checking Backend"
+    : backendIsOnline
+      ? "Backend Online"
+      : backendIsOffline
+        ? "Backend Offline"
+        : "Checking Backend";
+
+  const backendStatusDetail =
+    backendError ??
+    (backendHealth?.service
+      ? `${backendHealth.service} responded successfully.`
+      : "Checking the SentinelScope backend connection.");
+
+  const backendLastCheckedLabel = backendLastCheckedAt
+    ? `Last checked ${backendLastCheckedAt.toLocaleTimeString()}`
+    : "Not checked yet";
 
   const searchResults = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -266,6 +304,25 @@ function Topbar({ onMenuToggle, sidebarOpen }) {
     });
   };
 
+  const handleBackendHealthRefresh = async () => {
+    if (isManualBackendRefresh) {
+      return;
+    }
+
+    setIsManualBackendRefresh(true);
+
+    try {
+      await Promise.all([
+        refreshBackendHealth(),
+        new Promise((resolve) => {
+          window.setTimeout(resolve, 600);
+        }),
+      ]);
+    } finally {
+      setIsManualBackendRefresh(false);
+    }
+  };
+
   return (
     <>
       <header className="topbar">
@@ -303,6 +360,21 @@ function Topbar({ onMenuToggle, sidebarOpen }) {
         </div>
 
         <div className="topbar-right">
+          <button
+            className={`topbar-backend-status topbar-backend-status--${backendIndicatorState}`}
+            type="button"
+            aria-label={`${backendStatusLabel}. ${backendStatusDetail}`}
+            aria-busy={backendIsChecking || isManualBackendRefresh}
+            title={`${backendStatusDetail} ${backendLastCheckedLabel}. Click to check again.`}
+            onClick={handleBackendHealthRefresh}
+            disabled={isManualBackendRefresh}
+          >
+            <span className="topbar-backend-status-dot" aria-hidden="true" />
+
+            <span className="topbar-backend-status-label">
+              {backendStatusLabel}
+            </span>
+          </button>
           <div className="topbar-notifications" ref={notificationsRef}>
             <button
               className="topbar-icon-button"
