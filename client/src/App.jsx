@@ -3,6 +3,7 @@ import { Route, Routes } from "react-router-dom";
 
 import AppShell from "./components/layout/AppShell/AppShell";
 
+import AlertsProvider from "./contexts/AlertsProvider";
 import FindingsProvider from "./contexts/FindingsProvider";
 
 import Dashboard from "./pages/Dashboard/Dashboard";
@@ -24,15 +25,17 @@ function App() {
   }, []);
 
   return (
-    <FindingsProvider>
-      <AppShell>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
+    <AlertsProvider>
+      <FindingsProvider>
+        <AppShell>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
 
-          <Route path="/targets" element={<Targets />} />
-        </Routes>
-      </AppShell>
-    </FindingsProvider>
+            <Route path="/targets" element={<Targets />} />
+          </Routes>
+        </AppShell>
+      </FindingsProvider>
+    </AlertsProvider>
   );
 }
 

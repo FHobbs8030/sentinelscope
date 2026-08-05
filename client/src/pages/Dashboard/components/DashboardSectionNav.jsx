@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
   Activity,
@@ -50,14 +51,14 @@ const dashboardSections = [
   },
   {
     id: "dashboard-reports",
-    label: "Reports",
+    label: "Metrics",
     color: "#4ade80",
     rgb: "74, 222, 128",
     icon: FileText,
   },
   {
     id: "dashboard-terminal",
-    label: "Terminal",
+    label: "Telemetry",
     color: "#2dd4bf",
     rgb: "45, 212, 191",
     icon: Terminal,
@@ -65,6 +66,7 @@ const dashboardSections = [
 ];
 
 function DashboardSectionNav() {
+  const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState(dashboardSections[0].id);
 
   const navRef = useRef(null);
@@ -72,6 +74,56 @@ function DashboardSectionNav() {
   const selectionLockRef = useRef(false);
   const selectionTimerRef = useRef(null);
 
+  /*
+    Respond to external Dashboard navigation requests such as
+    Global Search selecting a scan, finding, or mission.
+
+    This keeps Section Control synchronized with programmatic navigation
+    without changing the normal scroll-detection thresholds.
+  */
+  useEffect(() => {
+    const handleExternalSectionFocus = (event) => {
+      const sectionId = event.detail?.sectionId;
+
+      const isValidSection = dashboardSections.some(
+        (section) => section.id === sectionId,
+      );
+
+      if (!isValidSection) {
+        return;
+      }
+
+      setActiveSection(sectionId);
+
+      selectionLockRef.current = true;
+
+      if (selectionTimerRef.current) {
+        window.clearTimeout(selectionTimerRef.current);
+      }
+
+      selectionTimerRef.current = window.setTimeout(() => {
+        selectionLockRef.current = false;
+        selectionTimerRef.current = null;
+      }, 1200);
+    };
+
+    window.addEventListener(
+      "dashboard:section-focus",
+      handleExternalSectionFocus,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "dashboard:section-focus",
+        handleExternalSectionFocus,
+      );
+    };
+  }, []);
+
+  /*
+    Track normal viewport scrolling and keep the active Section Control
+    synchronized with the workspace currently crossing the activation line.
+  */
   useEffect(() => {
     let animationFrameId = null;
 
@@ -84,7 +136,22 @@ function DashboardSectionNav() {
 
       const navBottom = navRef.current?.getBoundingClientRect().bottom ?? 166;
 
-      const activationLine = navBottom + 24;
+      const dashboardShell = document.querySelector(".dashboard-shell");
+
+      const dashboardStyles = dashboardShell
+        ? window.getComputedStyle(dashboardShell)
+        : null;
+
+      const scannerHeight = Number.parseFloat(
+        dashboardStyles?.getPropertyValue("--dashboard-scanner-height") || "38",
+      );
+
+      const contentClearance = Number.parseFloat(
+        dashboardStyles?.getPropertyValue("--dashboard-content-clearance") ||
+          "18",
+      );
+
+      const activationLine = navBottom + scannerHeight + contentClearance + 2;
 
       let nextSection = dashboardSections[0].id;
 
@@ -141,6 +208,10 @@ function DashboardSectionNav() {
     };
   }, []);
 
+  /*
+    Keep the active control centered when the Section Control track
+    becomes horizontally scrollable on smaller screens.
+  */
   useEffect(() => {
     const track = controlTrackRef.current;
 
@@ -167,6 +238,9 @@ function DashboardSectionNav() {
     });
   }, [activeSection]);
 
+  /*
+    Clear any pending selection lock timer when the component unmounts.
+  */
   useEffect(() => {
     return () => {
       if (selectionTimerRef.current) {
@@ -184,20 +258,39 @@ function DashboardSectionNav() {
       return;
     }
 
+    /*
+    Manual workspace navigation ends any previous Global Search focus.
+
+    This prevents stale ?focus=...&id=... parameters from restoring
+    Operations when the Dashboard is refreshed later.
+  */
+    navigate("/", {
+      replace: true,
+    });
+
     setActiveSection(sectionId);
+
     selectionLockRef.current = true;
 
     if (selectionTimerRef.current) {
       window.clearTimeout(selectionTimerRef.current);
     }
 
-    section.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
+    if (sectionId === "dashboard-overview") {
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    } else {
+      section.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
 
     selectionTimerRef.current = window.setTimeout(() => {
       selectionLockRef.current = false;
+      selectionTimerRef.current = null;
     }, 1200);
   };
 

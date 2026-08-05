@@ -47,9 +47,11 @@ function TerminalPanel({
       </div>
 
       <div className="terminal-panel__footer">
-        <span className="terminal-panel__prompt">&gt;</span>
+        <span className="terminal-panel__prompt">●</span>
 
-        <span className="terminal-panel__footer-text">awaiting command...</span>
+        <span className="terminal-panel__footer-text">
+          Live runtime telemetry stream
+        </span>
       </div>
     </section>
   );

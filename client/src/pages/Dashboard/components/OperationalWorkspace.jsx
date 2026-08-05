@@ -10,7 +10,7 @@ import ActivityFeed from "../../../components/ActivityFeed";
 import useScans from "../../../hooks/useScans";
 import useMissions from "../../../hooks/useMissions";
 
-function OperationalWorkspace() {
+function OperationalWorkspace({ focusType, focusId }) {
   const { scans, metrics } = useScans();
   const { metrics: missionMetrics } = useMissions();
 
@@ -49,7 +49,7 @@ function OperationalWorkspace() {
         </div>
 
         <div className="operations-scans-slot">
-          <RecentScansPanel />
+          <RecentScansPanel focusType={focusType} focusId={focusId} />
         </div>
 
         <div className="operations-activity-slot">

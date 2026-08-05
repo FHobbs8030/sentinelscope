@@ -52,7 +52,7 @@ const navigation = [
 
 function Sidebar({ className = "sidebar", onClose }) {
   return (
-    <aside className={className}>
+    <aside id="primary-sidebar" className={className}>
       <div className="sidebar-header">
         <div className="sidebar-logo">
           <div className="sidebar-logo-icon">S</div>

@@ -8,11 +8,11 @@ import {
 
 import { getScans } from "../services/api/scansApi";
 
-import scanRuntimeEngine from "../services/runtime/scanRuntimeEngine";
-
-import { TERMINAL_SCAN_STATES } from "../services/runtime/scanStateMachine";
+import { subscribeToBackendRecovery } from "../services/runtime/backendConnectionEvents";
 
 import { bootstrapRuntime } from "../services/runtime/runtimeBootstrap";
+import scanRuntimeEngine from "../services/runtime/scanRuntimeEngine";
+import { TERMINAL_SCAN_STATES } from "../services/runtime/scanStateMachine";
 
 import { rebuildRuntimeScans } from "./runtimeRecovery";
 
@@ -238,23 +238,31 @@ const useScans = () => {
     criticalFindingsCount,
   ]);
 
-    useEffect(() => {
-      const requestController = new AbortController();
+  useEffect(() => {
+    const requestController = new AbortController();
 
-      const requestTimer = window.setTimeout(() => {
-        void loadScans({
-          signal: requestController.signal,
-        });
-      }, 0);
+    const requestTimer = window.setTimeout(() => {
+      void loadScans({
+        signal: requestController.signal,
+      });
+    }, 0);
 
-      return () => {
-        window.clearTimeout(requestTimer);
-        requestController.abort();
-      };
-    }, [loadScans]);
+    return () => {
+      window.clearTimeout(requestTimer);
+      requestController.abort();
+    };
+  }, [loadScans]);
 
   useEffect(() => {
-    const unsubscribe = scanRuntimeEngine.subscribe((updatedScans) => {
+    const unsubscribeRecovery = subscribeToBackendRecovery(() => {
+      void refreshScans();
+    });
+
+    return unsubscribeRecovery;
+  }, [refreshScans]);
+
+  useEffect(() => {
+    const unsubscribeRuntime = scanRuntimeEngine.subscribe((updatedScans) => {
       setScans(updatedScans);
 
       setSelectedScan((previousSelectedScan) => {
@@ -269,9 +277,7 @@ const useScans = () => {
       });
     });
 
-    return () => {
-      unsubscribe();
-    };
+    return unsubscribeRuntime;
   }, []);
 
   return {

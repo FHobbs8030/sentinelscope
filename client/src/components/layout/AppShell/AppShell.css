@@ -37,6 +37,10 @@
   --current-sidebar-width: var(--sidebar-width-collapsed);
 }
 
+.app-shell[data-sidebar="open"] {
+  --current-sidebar-width: var(--sidebar-width-collapsed);
+}
+
 .app-shell-main {
   width: calc(100% - var(--current-sidebar-width));
   min-width: 0;
@@ -61,8 +65,7 @@
 
   min-width: 0;
 
-  padding:
-    var(--space-6);
+  padding: var(--space-6);
 
   overflow-x: hidden;
 
@@ -78,8 +81,7 @@
 
   inset: 0;
 
-  background:
-    rgba(2, 6, 23, 0.64);
+  background: rgba(2, 6, 23, 0.64);
 
   opacity: 0;
   visibility: hidden;
@@ -101,6 +103,58 @@
   visibility: visible;
 
   pointer-events: auto;
+}
+
+/* =========================================
+   OPEN SIDEBAR HEADER ACCESS
+========================================= */
+
+/*
+  Keep the hamburger available as a true open/close toggle.
+
+  The open sidebar sits above the normal topbar, so when the drawer is open
+  the topbar is temporarily raised above it. All topbar content becomes
+  visually hidden and non-interactive except the hamburger toggle.
+
+  This preserves:
+  - Hamburger toggle
+  - Sidebar X button
+  - Navigation close
+  - Backdrop close where exposed
+  - Escape close
+*/
+.app-shell[data-sidebar="open"] .topbar {
+  z-index: 1300;
+
+  background: transparent;
+
+  border-bottom-color: transparent;
+
+  box-shadow: none;
+
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+
+  pointer-events: none;
+}
+
+.app-shell[data-sidebar="open"] .topbar-workspace,
+.app-shell[data-sidebar="open"] .topbar-search,
+.app-shell[data-sidebar="open"] .topbar-icon-button,
+.app-shell[data-sidebar="open"] .topbar-user {
+  visibility: hidden;
+
+  pointer-events: none;
+}
+
+.app-shell[data-sidebar="open"] .topbar-menu-toggle {
+  visibility: visible;
+
+  pointer-events: auto;
+
+  position: relative;
+
+  z-index: 1;
 }
 
 /* =========================================
@@ -146,9 +200,7 @@
 
 @media (max-width: 480px) {
   .page-container {
-    padding:
-      var(--space-3)
-      var(--space-2);
+    padding: var(--space-3) var(--space-2);
   }
 }
 

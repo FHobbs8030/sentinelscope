@@ -533,3 +533,78 @@
     filter: none;
   }
 }
+
+/* =========================================
+   USER SCANNER ANIMATION PREFERENCE
+========================================= */
+
+/*
+  Scanner Animation OFF:
+  Keep the scanner visibly active, but hold the beam at center
+  instead of sweeping horizontally.
+*/
+html[data-scanner-animation="off"]
+  :is(
+    .sentinel-pulse-scanner--active,
+    .sentinel-pulse-scanner--coasting
+  )
+  .sentinel-pulse-scanner__beam {
+  animation: none;
+
+  transform: translate3d(
+    calc(50cqw - 50% - var(--scanner-rail-inset)),
+    -50%,
+    0
+  );
+
+  opacity: 0.9;
+
+  filter: brightness(1.08) saturate(1.08);
+}
+
+html[data-scanner-animation="off"]
+  :is(
+    .sentinel-pulse-scanner--active,
+    .sentinel-pulse-scanner--coasting
+  )
+  .sentinel-pulse-scanner__ambient {
+  animation: none;
+
+  opacity: 0.22;
+}
+
+/*
+  Reduced Motion is the accessibility master override.
+
+  Even if Scanner Animation is ON, a user who enables Reduced Motion
+  gets a stationary energized scanner rather than horizontal movement.
+*/
+html[data-motion="reduced"]
+  :is(
+    .sentinel-pulse-scanner--active,
+    .sentinel-pulse-scanner--coasting
+  )
+  .sentinel-pulse-scanner__beam {
+  animation: none !important;
+
+  transform: translate3d(
+    calc(50cqw - 50% - var(--scanner-rail-inset)),
+    -50%,
+    0
+  ) !important;
+
+  opacity: 0.9;
+
+  filter: brightness(1.08) saturate(1.08);
+}
+
+html[data-motion="reduced"]
+  :is(
+    .sentinel-pulse-scanner--active,
+    .sentinel-pulse-scanner--coasting
+  )
+  .sentinel-pulse-scanner__ambient {
+  animation: none !important;
+
+  opacity: 0.22;
+}

@@ -12,14 +12,25 @@ function ScanLaunchPanel() {
   const [scanType, setScanType] = useState("full");
   const [profile, setProfile] = useState("General");
   const [severity, setSeverity] = useState("medium");
+  const [targetError, setTargetError] = useState("");
 
-  const handleStartScan = () => {
-    if (!target.trim()) {
+  const handleStartScan = (event) => {
+    event?.preventDefault();
+
+    const normalizedTarget = target.trim();
+
+    if (!normalizedTarget) {
+      setTargetError(
+        "Enter an IP address, hostname, or domain before starting a scan.",
+      );
+
       return;
     }
 
+    setTargetError("");
+
     launchMission({
-      target,
+      target: normalizedTarget,
       type: scanType,
       profile,
       severity,
@@ -29,7 +40,7 @@ function ScanLaunchPanel() {
   };
 
   return (
-    <div className="scan-launch-panel">
+    <form className="scan-launch-panel" onSubmit={handleStartScan}>
       <div className="scan-panel-header">
         <div>
           <h2 className="scan-panel-title">Start New Scan</h2>
@@ -41,13 +52,29 @@ function ScanLaunchPanel() {
       </div>
 
       <div className="scan-form-grid">
-        <Input
-          label="Target"
-          value={target}
-          onChange={(event) => setTarget(event.target.value)}
-          placeholder="example.com or 192.168.1.1"
-          helperText="Enter an IP address, hostname, or domain."
-        />
+        <div className="scan-target-field">
+          <Input
+            label="Target"
+            value={target}
+            onChange={(event) => {
+              const nextTarget = event.target.value;
+
+              setTarget(nextTarget);
+
+              if (targetError && nextTarget.trim()) {
+                setTargetError("");
+              }
+            }}
+            placeholder="example.com or 192.168.1.1"
+            helperText="Enter an IP address, hostname, or domain."
+          />
+
+          {targetError ? (
+            <p className="scan-target-error" role="alert">
+              {targetError}
+            </p>
+          ) : null}
+        </div>
 
         <label className="scan-field">
           <span className="scan-field-label">Scan Type</span>
@@ -65,18 +92,26 @@ function ScanLaunchPanel() {
         </label>
 
         <label className="scan-field">
-          <span className="scan-field-label">Profile</span>
+          <span className="scan-field-label">
+            Profile
+            <span className="scan-field-status">Metadata only</span>
+          </span>
 
           <select
             className="scan-select"
             value={profile}
             onChange={(event) => setProfile(event.target.value)}
           >
-            <option>General</option>
-            <option>Quick</option>
-            <option>Comprehensive</option>
-            <option>Critical</option>
+            <option value="General">General</option>
+            <option value="Quick">Quick</option>
+            <option value="Comprehensive">Comprehensive</option>
+            <option value="Critical">Critical</option>
           </select>
+
+          <span className="scan-field-helper">
+            Saved with the scan record. Profile does not currently change
+            runtime behavior.
+          </span>
         </label>
 
         <label className="scan-field">
@@ -96,13 +131,18 @@ function ScanLaunchPanel() {
       </div>
 
       <div className="scan-panel-actions">
-        <Button onClick={handleStartScan}>Start Scan</Button>
+        <Button type="submit">Start Scan</Button>
 
-        <button className="scan-secondary-action" type="button">
-          Import Targets
+        <button
+          className="scan-secondary-action"
+          type="button"
+          disabled
+          title="Target import is planned for a future release."
+        >
+          Import Targets — Planned
         </button>
       </div>
-    </div>
+    </form>
   );
 }
 
