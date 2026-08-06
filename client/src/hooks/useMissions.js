@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { API_ERROR_CODES, ApiError } from "../services/api/apiClient";
 
 import { getMissions } from "../services/api/missionsApi";
 
 import { recoverMissions } from "../services/orchestration/missionRecovery";
-
 import missionStore from "../services/orchestration/missionStore";
+
+import { subscribeToBackendRecovery } from "../services/runtime/backendConnectionEvents";
 
 const normalizeMissionCollection = (responseData) => {
   const missionData = Array.isArray(responseData)
@@ -37,47 +38,64 @@ const normalizeMissionCollection = (responseData) => {
 export default function useMissions() {
   const [missions, setMissions] = useState(missionStore.getMissions());
 
+  const hydrateMissions = useCallback(async (requestOptions = {}) => {
+    const { signal } = requestOptions;
+
+    try {
+      const response = await getMissions(requestOptions);
+
+      if (signal?.aborted) {
+        return false;
+      }
+
+      const normalizedMissions = normalizeMissionCollection(response);
+
+      missionStore.setMissions(normalizedMissions);
+
+      recoverMissions(normalizedMissions);
+
+      return true;
+    } catch (error) {
+      if (signal?.aborted) {
+        return false;
+      }
+
+      console.error(
+        "[useMissions] Failed to hydrate missions from MongoDB",
+        error,
+      );
+
+      return false;
+    }
+  }, []);
+
   useEffect(() => {
     const requestController = new AbortController();
 
-    async function hydrateMissions() {
-      try {
-        const response = await getMissions({
-          signal: requestController.signal,
-        });
-
-        if (requestController.signal.aborted) {
-          return;
-        }
-
-        const normalizedMissions = normalizeMissionCollection(response);
-
-        missionStore.setMissions(normalizedMissions);
-
-        recoverMissions(normalizedMissions);
-      } catch (error) {
-        if (requestController.signal.aborted) {
-          return;
-        }
-
-        console.error(
-          "[useMissions] Failed to hydrate missions from MongoDB",
-          error,
-        );
-      }
-    }
-
-    const unsubscribe = missionStore.subscribe((updatedMissions) => {
+    const unsubscribeStore = missionStore.subscribe((updatedMissions) => {
       setMissions(updatedMissions);
     });
 
-    void hydrateMissions();
+    const requestTimer = window.setTimeout(() => {
+      void hydrateMissions({
+        signal: requestController.signal,
+      });
+    }, 0);
 
     return () => {
+      window.clearTimeout(requestTimer);
       requestController.abort();
-      unsubscribe();
+      unsubscribeStore();
     };
-  }, []);
+  }, [hydrateMissions]);
+
+  useEffect(() => {
+    const unsubscribeRecovery = subscribeToBackendRecovery(() => {
+      void hydrateMissions();
+    });
+
+    return unsubscribeRecovery;
+  }, [hydrateMissions]);
 
   const queuedMissions = useMemo(() => {
     return missions.filter((mission) => mission.state === "queued");
@@ -121,5 +139,6 @@ export default function useMissions() {
     completedMissions,
     failedMissions,
     metrics,
+    refreshMissions: hydrateMissions,
   };
 }
