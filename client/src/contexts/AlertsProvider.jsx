@@ -17,6 +17,7 @@ import {
 } from "../services/api/apiClient";
 
 import { generateCorrelationAssessment } from "../services/intelligence/correlationEngine";
+import { subscribeToBackendRecovery } from "../services/runtime/backendConnectionEvents";
 
 import {
   calculateAlertMetrics,
@@ -170,6 +171,14 @@ function AlertsProvider({ children }) {
       requestController.abort();
     };
   }, [loadAlerts]);
+
+  useEffect(() => {
+    const unsubscribeRecovery = subscribeToBackendRecovery(() => {
+      void refreshAlerts();
+    });
+
+    return unsubscribeRecovery;
+  }, [refreshAlerts]);
 
   const contextValue = useMemo(
     () => ({

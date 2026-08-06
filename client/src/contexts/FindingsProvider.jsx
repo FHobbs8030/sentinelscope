@@ -10,6 +10,8 @@ import {
 
 import { getFindings } from "../services/api/findingsApi";
 
+import { subscribeToBackendRecovery } from "../services/runtime/backendConnectionEvents";
+
 import {
   calculateFindingExposureScore,
   calculateSeverityMetrics,
@@ -83,6 +85,14 @@ function FindingsProvider({ children }) {
       requestController.abort();
     };
   }, [loadFindings]);
+
+  useEffect(() => {
+    const unsubscribeRecovery = subscribeToBackendRecovery(() => {
+      void refreshFindings();
+    });
+
+    return unsubscribeRecovery;
+  }, [refreshFindings]);
 
   const severityMetrics = useMemo(() => {
     return calculateSeverityMetrics(findings);
