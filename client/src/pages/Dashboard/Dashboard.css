@@ -179,7 +179,7 @@
   .dashboard-shell {
     --dashboard-control-nav-height: 96px;
     --dashboard-scanner-height: 30px;
-    --dashboard-content-clearance: 14px;
+    --dashboard-content-clearance: 8px;
   }
 
   .dashboard-zone {
@@ -204,7 +204,7 @@
 
 @media (max-width: 480px) {
   .kpi-summary-section {
-    margin-top: var(--space-4);
+    margin-top: 0;
   }
 
   .dashboard-zone {
@@ -228,5 +228,7 @@
   .dashboard-shell {
     --dashboard-topbar-height: 158px;
     --dashboard-scanner-height: 26px;
+
+    margin-top: calc(-1 * var(--space-3));
   }
 }

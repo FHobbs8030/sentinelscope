@@ -711,14 +711,65 @@
 }
 
 @media (max-width: 480px) {
+  .mobile-scans-list {
+    gap: 8px;
+  }
+
   .mobile-scan-card {
-    padding: 12px;
+    padding: 10px;
+  }
+
+  .mobile-scan-target {
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+  }
+
+  .mobile-scan-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+    gap: 10px 12px;
   }
 
   .mobile-scan-field {
-    grid-template-columns: 68px minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
+
+    align-items: flex-start;
+
+    min-height: 0;
+
+    gap: 4px;
+
+    border-bottom: 0;
+  }
+
+  .mobile-scan-progress-field {
+    grid-column: 1 / -1;
+  }
+
+  .mobile-scan-progress-field .progress-wrapper {
+    gap: 6px;
+  }
+
+  .mobile-scan-card .scan-action-button {
+    min-width: 72px;
+    min-height: 38px;
+  }
+
+  .mobile-scans-toggle {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 320px) {
+  .mobile-scan-meta {
+    grid-template-columns: 1fr;
 
     gap: 8px;
+  }
+
+  .mobile-scan-progress-field {
+    grid-column: auto;
   }
 }
 
