@@ -35,6 +35,39 @@ function App() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
 
+              <Route
+                path="/scans"
+                element={
+                  <Dashboard initialSection="dashboard-operations" />
+                }
+              />
+
+              <Route
+                path="/recon"
+                element={
+                  <Dashboard initialSection="dashboard-operations" />
+                }
+              />
+
+              <Route
+                path="/enumeration"
+                element={
+                  <Dashboard initialSection="dashboard-operations" />
+                }
+              />
+
+              <Route
+                path="/port-scanning"
+                element={
+                  <Dashboard initialSection="dashboard-operations" />
+                }
+              />
+
+              <Route
+                path="/dns-analysis"
+                element={<Dashboard initialSection="dashboard-analytics" />}
+              />
+
               <Route path="/targets" element={<Targets />} />
             </Routes>
           </AppShell>

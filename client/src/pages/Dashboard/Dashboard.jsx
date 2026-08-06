@@ -30,7 +30,7 @@ import {
   OPERATIONAL_FOCUS_TYPES,
 } from "../../utils/operationalIdentity";
 
-function Dashboard() {
+function Dashboard({ initialSection = "dashboard-overview" }) {
   const telemetryLogs = useTelemetry();
   const { alerts } = useAlerts();
 
@@ -76,8 +76,9 @@ function Dashboard() {
     const params = new URLSearchParams(window.location.search);
 
     const hasSearchFocus = params.get("focus") && params.get("id");
+    const hasInitialSection = initialSection !== "dashboard-overview";
 
-    if (hasSearchFocus) {
+    if (hasSearchFocus || hasInitialSection) {
       return;
     }
 
@@ -95,7 +96,51 @@ function Dashboard() {
       left: 0,
       behavior: "auto",
     });
-  }, []);
+  }, [initialSection]);
+
+  useEffect(() => {
+    const supportedSectionIds = new Set([
+      "dashboard-overview",
+      "dashboard-operations",
+      "dashboard-analytics",
+      "dashboard-executive",
+      "dashboard-alerts",
+      "dashboard-reports",
+      "dashboard-terminal",
+    ]);
+
+    if (
+      initialSection === "dashboard-overview" ||
+      !supportedSectionIds.has(initialSection)
+    ) {
+      return undefined;
+    }
+
+    const section = document.getElementById(initialSection);
+
+    if (!section) {
+      return undefined;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("dashboard:section-focus", {
+        detail: {
+          sectionId: initialSection,
+        },
+      }),
+    );
+
+    const animationFrameId = window.requestAnimationFrame(() => {
+      section.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+    };
+  }, [initialSection]);
 
   useEffect(() => {
     const supportedFocusTypes = new Set(Object.values(OPERATIONAL_FOCUS_TYPES));

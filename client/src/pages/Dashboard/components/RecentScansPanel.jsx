@@ -13,7 +13,7 @@ import scanEventBus, {
   SCAN_EVENTS,
 } from "../../../services/runtime/scanEventBus";
 
-const MOBILE_SCAN_LIMIT = 10;
+const MOBILE_SCAN_PAGE_SIZE = 5;
 const NEW_SCAN_FOCUS_DURATION_MS = 7000;
 
 const getStableScanKey = (scan, index) => {
@@ -25,7 +25,9 @@ function RecentScansPanel({ focusType, focusId }) {
 
   const { scans, isLoading, error, refreshScans } = useScans();
 
-  const [showAllMobileScans, setShowAllMobileScans] = useState(false);
+  const [visibleMobileScanCount, setVisibleMobileScanCount] = useState(
+    MOBILE_SCAN_PAGE_SIZE,
+  );
   const [focusedScanId, setFocusedScanId] = useState(null);
 
   const panelRef = useRef(null);
@@ -66,11 +68,22 @@ function RecentScansPanel({ focusType, focusId }) {
     };
   }, []);
 
-useEffect(() => {
-  if (
-    !effectiveFocusedScanId ||
-    handledFocusIdRef.current === effectiveFocusedScanId
-  ) {
+  const focusedMobileScanIndex = effectiveFocusedScanId
+    ? scans.findIndex((scan) =>
+        scanMatchesIdentity(scan, effectiveFocusedScanId),
+      )
+    : -1;
+
+  const effectiveVisibleMobileScanCount = Math.max(
+    visibleMobileScanCount,
+    focusedMobileScanIndex >= 0 ? focusedMobileScanIndex + 1 : 0,
+  );
+
+  useEffect(() => {
+    if (
+      !effectiveFocusedScanId ||
+      handledFocusIdRef.current === effectiveFocusedScanId
+    ) {
     return;
   }
 
@@ -136,13 +149,28 @@ useEffect(() => {
 
     focusTimerRef.current = null;
   }, NEW_SCAN_FOCUS_DURATION_MS);
-}, [effectiveFocusedScanId, externalFocusedScanId, navigate, scans]);
+  }, [
+    effectiveFocusedScanId,
+    externalFocusedScanId,
+    navigate,
+    scans,
+    effectiveVisibleMobileScanCount,
+  ]);
 
-  const mobileScans = showAllMobileScans
-    ? scans
-    : scans.slice(0, MOBILE_SCAN_LIMIT);
+  const mobileScans = scans.slice(0, effectiveVisibleMobileScanCount);
 
-  const hasAdditionalMobileScans = scans.length > MOBILE_SCAN_LIMIT;
+  const remainingMobileScans = Math.max(
+    0,
+    scans.length - effectiveVisibleMobileScanCount,
+  );
+
+  const hasAdditionalMobileScans = remainingMobileScans > 0;
+  const canCollapseMobileScans =
+    effectiveVisibleMobileScanCount > MOBILE_SCAN_PAGE_SIZE;
+  const nextMobileScanCount = Math.min(
+    MOBILE_SCAN_PAGE_SIZE,
+    remainingMobileScans,
+  );
 
   const formatStatusLabel = (status = "") => {
     return status.charAt(0).toUpperCase() + status.slice(1);
@@ -452,18 +480,35 @@ useEffect(() => {
           );
         })}
 
-        {hasAdditionalMobileScans ? (
+        {hasAdditionalMobileScans || canCollapseMobileScans ? (
           <div className="mobile-scans-actions">
             <button
               type="button"
               className="mobile-scans-toggle"
+              aria-expanded={
+                effectiveVisibleMobileScanCount > MOBILE_SCAN_PAGE_SIZE
+              }
               onClick={() => {
-                setShowAllMobileScans((currentValue) => !currentValue);
+                if (hasAdditionalMobileScans) {
+                  setVisibleMobileScanCount(
+                    Math.min(
+                      effectiveVisibleMobileScanCount +
+                        MOBILE_SCAN_PAGE_SIZE,
+                      scans.length,
+                    ),
+                  );
+
+                  return;
+                }
+
+                setVisibleMobileScanCount(MOBILE_SCAN_PAGE_SIZE);
               }}
             >
-              {showAllMobileScans
-                ? `Show Recent ${MOBILE_SCAN_LIMIT}`
-                : `View All Scans (${scans.length})`}
+              {hasAdditionalMobileScans
+                ? `Show ${nextMobileScanCount} more scan${
+                    nextMobileScanCount === 1 ? "" : "s"
+                  }`
+                : `Show recent ${MOBILE_SCAN_PAGE_SIZE}`}
             </button>
           </div>
         ) : null}
