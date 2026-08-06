@@ -13,6 +13,7 @@ import scanEventBus, {
   SCAN_EVENTS,
 } from "../../../services/runtime/scanEventBus";
 
+const DESKTOP_SCAN_PAGE_SIZE = 15;
 const MOBILE_SCAN_PAGE_SIZE = 5;
 const NEW_SCAN_FOCUS_DURATION_MS = 7000;
 
@@ -25,6 +26,9 @@ function RecentScansPanel({ focusType, focusId }) {
 
   const { scans, isLoading, error, refreshScans } = useScans();
 
+  const [visibleDesktopScanCount, setVisibleDesktopScanCount] = useState(
+    DESKTOP_SCAN_PAGE_SIZE,
+  );
   const [visibleMobileScanCount, setVisibleMobileScanCount] = useState(
     MOBILE_SCAN_PAGE_SIZE,
   );
@@ -68,7 +72,7 @@ function RecentScansPanel({ focusType, focusId }) {
     };
   }, []);
 
-  const focusedMobileScanIndex = effectiveFocusedScanId
+  const focusedScanIndex = effectiveFocusedScanId
     ? scans.findIndex((scan) =>
         scanMatchesIdentity(scan, effectiveFocusedScanId),
       )
@@ -76,7 +80,7 @@ function RecentScansPanel({ focusType, focusId }) {
 
   const effectiveVisibleMobileScanCount = Math.max(
     visibleMobileScanCount,
-    focusedMobileScanIndex >= 0 ? focusedMobileScanIndex + 1 : 0,
+    focusedScanIndex >= 0 ? focusedScanIndex + 1 : 0,
   );
 
   useEffect(() => {
@@ -156,6 +160,30 @@ function RecentScansPanel({ focusType, focusId }) {
     scans,
     effectiveVisibleMobileScanCount,
   ]);
+
+  const baseDesktopScans = scans.slice(0, visibleDesktopScanCount);
+
+  const focusedDesktopScan =
+    focusedScanIndex >= visibleDesktopScanCount
+      ? scans[focusedScanIndex]
+      : null;
+
+  const desktopScans = focusedDesktopScan
+    ? [...baseDesktopScans, focusedDesktopScan]
+    : baseDesktopScans;
+
+  const remainingDesktopScans = Math.max(
+    0,
+    scans.length - visibleDesktopScanCount,
+  );
+
+  const hasAdditionalDesktopScans = remainingDesktopScans > 0;
+  const canCollapseDesktopScans =
+    visibleDesktopScanCount > DESKTOP_SCAN_PAGE_SIZE;
+  const nextDesktopScanCount = Math.min(
+    DESKTOP_SCAN_PAGE_SIZE,
+    remainingDesktopScans,
+  );
 
   const mobileScans = scans.slice(0, effectiveVisibleMobileScanCount);
 
@@ -309,7 +337,7 @@ function RecentScansPanel({ focusType, focusId }) {
           </thead>
 
           <tbody>
-            {scans.map((scan, index) => {
+            {desktopScans.map((scan, index) => {
               const isFocusedScan = scanMatchesIdentity(
                 scan,
                 effectiveFocusedScanId,
@@ -391,6 +419,46 @@ function RecentScansPanel({ focusType, focusId }) {
             })}
           </tbody>
         </table>
+
+        <div className="desktop-scans-pagination">
+          <span
+            className="desktop-scans-summary"
+            role="status"
+            aria-live="polite"
+          >
+            Showing {desktopScans.length} of {scans.length} scans
+          </span>
+
+          {hasAdditionalDesktopScans || canCollapseDesktopScans ? (
+            <button
+              type="button"
+              className="desktop-scans-toggle"
+              aria-expanded={
+                visibleDesktopScanCount > DESKTOP_SCAN_PAGE_SIZE
+              }
+              onClick={() => {
+                if (hasAdditionalDesktopScans) {
+                  setVisibleDesktopScanCount((currentCount) =>
+                    Math.min(
+                      currentCount + DESKTOP_SCAN_PAGE_SIZE,
+                      scans.length,
+                    ),
+                  );
+
+                  return;
+                }
+
+                setVisibleDesktopScanCount(DESKTOP_SCAN_PAGE_SIZE);
+              }}
+            >
+              {hasAdditionalDesktopScans
+                ? `Show ${nextDesktopScanCount} more scan${
+                    nextDesktopScanCount === 1 ? "" : "s"
+                  }`
+                : `Show recent ${DESKTOP_SCAN_PAGE_SIZE}`}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="mobile-scans-list">

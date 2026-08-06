@@ -530,6 +530,63 @@
    RESPONSIVE SCAN TABLE
 ========================================= */
 
+.desktop-scans-pagination {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  min-width: 760px;
+
+  gap: 12px;
+
+  padding: 12px 14px 2px;
+
+  border-top: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.desktop-scans-summary {
+  color: var(--color-text-secondary);
+
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.desktop-scans-toggle {
+  min-height: 38px;
+
+  padding: 0 14px;
+
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  border-radius: 9px;
+
+  background: rgba(37, 99, 235, 0.1);
+
+  color: var(--color-text-primary);
+
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.desktop-scans-toggle:hover {
+  border-color: rgba(96, 165, 250, 0.55);
+
+  background: rgba(37, 99, 235, 0.16);
+}
+
+.desktop-scans-toggle:focus-visible {
+  outline: 2px solid rgba(96, 165, 250, 0.85);
+  outline-offset: 2px;
+}
+
 .mobile-scans-list {
   display: none;
 }
@@ -775,7 +832,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .scan-table-row,
-  .mobile-scan-card {
+  .mobile-scan-card,
+  .desktop-scans-toggle {
     transition: none;
   }
 }
