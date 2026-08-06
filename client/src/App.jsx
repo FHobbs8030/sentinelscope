@@ -5,6 +5,8 @@ import AppShell from "./components/layout/AppShell/AppShell";
 
 import AlertsProvider from "./contexts/AlertsProvider";
 import FindingsProvider from "./contexts/FindingsProvider";
+import MissionsProvider from "./contexts/MissionsProvider";
+import ScansProvider from "./contexts/ScansProvider";
 
 import Dashboard from "./pages/Dashboard/Dashboard";
 import Targets from "./pages/Targets/Targets";
@@ -25,17 +27,21 @@ function App() {
   }, []);
 
   return (
-    <AlertsProvider>
-      <FindingsProvider>
-        <AppShell>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
+    <MissionsProvider>
+      <ScansProvider>
+      <AlertsProvider>
+        <FindingsProvider>
+          <AppShell>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
 
-            <Route path="/targets" element={<Targets />} />
-          </Routes>
-        </AppShell>
-      </FindingsProvider>
-    </AlertsProvider>
+              <Route path="/targets" element={<Targets />} />
+            </Routes>
+          </AppShell>
+        </FindingsProvider>
+      </AlertsProvider>
+      </ScansProvider>
+    </MissionsProvider>
   );
 }
 
