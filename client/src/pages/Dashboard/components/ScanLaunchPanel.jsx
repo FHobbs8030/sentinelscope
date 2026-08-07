@@ -365,6 +365,9 @@ function ScanLaunchPanel({ onScanFinished }) {
 
               <strong className="scan-queue-panel__summary">
                 {queueMetrics.active} active · {queueMetrics.queued} queued
+                {queueMetrics.recovered
+                  ? ` · ${queueMetrics.recovered} recovered`
+                  : ""}
               </strong>
             </div>
 
@@ -390,7 +393,11 @@ function ScanLaunchPanel({ onScanFinished }) {
                   <span>Scanning / preparing runtime</span>
                 </div>
 
-                <span className="scan-queue-item__state">Active</span>
+                <span className="scan-queue-item__state">
+                  {queuedActiveMission.queueRecovered
+                    ? "Recovered · Active"
+                    : "Active"}
+                </span>
               </div>
             ) : null}
 
@@ -407,7 +414,11 @@ function ScanLaunchPanel({ onScanFinished }) {
                   </span>
                 </div>
 
-                <span className="scan-queue-item__state">Waiting</span>
+                <span className="scan-queue-item__state">
+                  {mission.queueRecovered
+                    ? "Recovered · Waiting"
+                    : "Waiting"}
+                </span>
 
                 <button
                   className="scan-queue-item__remove"

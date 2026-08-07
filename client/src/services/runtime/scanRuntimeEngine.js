@@ -26,6 +26,7 @@ const SCAN_PERSIST_INTERVAL = 10000;
 class ScanRuntimeEngine {
   constructor() {
     this.scans = [];
+    this.initialized = false;
 
     this.intervalId = null;
 
@@ -42,6 +43,7 @@ class ScanRuntimeEngine {
 
   initialize(initialScans = []) {
     this.scans = Array.isArray(initialScans) ? [...initialScans] : [];
+    this.initialized = true;
 
     const interruptedCount = this.scans.filter(
       (scan) => scan.status === "interrupted",
@@ -100,6 +102,7 @@ class ScanRuntimeEngine {
     this.stop();
 
     this.scans = [];
+    this.initialized = false;
 
     this.listeners.clear();
 
@@ -140,6 +143,10 @@ class ScanRuntimeEngine {
 
   getScans() {
     return [...this.scans];
+  }
+
+  isInitialized() {
+    return this.initialized;
   }
 
   setScans(scans = []) {

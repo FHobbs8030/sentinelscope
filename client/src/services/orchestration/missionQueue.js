@@ -8,10 +8,15 @@ let snapshot = null;
 
 const buildSnapshot = () => {
   const queuedMissions = [...missionQueue];
+  const recovered = [activeMission, ...queuedMissions].filter(
+    (mission) => Boolean(mission?.queueRecovered),
+  ).length;
+
   const metrics = {
     queued: queuedMissions.length,
     active: activeMission ? 1 : 0,
     total: queuedMissions.length + (activeMission ? 1 : 0),
+    recovered,
     busy: Boolean(activeMission) || queuedMissions.length > 0,
   };
 
@@ -39,6 +44,45 @@ export function enqueueMission(mission) {
   publishQueueState();
 
   return mission;
+}
+
+export function recoverMissionQueue({
+  activeMission: recoveredActiveMission = null,
+  queuedMissions = [],
+} = {}) {
+  missionQueue.length = 0;
+
+  activeMission = recoveredActiveMission
+    ? {
+        ...recoveredActiveMission,
+        queueRecovered: true,
+      }
+    : null;
+
+  const seenMissionIds = new Set(
+    activeMission?.id ? [String(activeMission.id)] : [],
+  );
+
+  queuedMissions.forEach((mission) => {
+    const missionId = mission?.id ? String(mission.id) : null;
+
+    if (missionId && seenMissionIds.has(missionId)) {
+      return;
+    }
+
+    if (missionId) {
+      seenMissionIds.add(missionId);
+    }
+
+    missionQueue.push({
+      ...mission,
+      queueRecovered: true,
+    });
+  });
+
+  publishQueueState();
+
+  return getMissionQueueSnapshot();
 }
 
 export function dequeueMission() {
