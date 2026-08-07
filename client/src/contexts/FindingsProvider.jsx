@@ -58,9 +58,16 @@ function FindingsProvider({ children }) {
         search: query.search,
       };
 
+      const summaryQuery = {
+        severity: normalizedQuery.severity,
+        status: normalizedQuery.status,
+        target: normalizedQuery.target,
+        search: normalizedQuery.search,
+      };
+
       const [pageData, summaryData] = await Promise.all([
         getFindingsPage(normalizedQuery, { signal }),
-        getFindingsSummary(normalizedQuery, { signal }),
+        getFindingsSummary(summaryQuery, { signal }),
       ]);
 
       if (signal?.aborted) {
