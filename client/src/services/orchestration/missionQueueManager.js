@@ -1,11 +1,16 @@
 import {
   activateNextMission,
   clearActiveMission,
+  getActiveMission,
+  getMissionQueue,
   getMissionQueueMetrics,
   subscribeMissionQueue,
 } from "./missionQueue";
 
 import { simulateMissionLifecycle } from "./missionSimulator";
+import missionPersistenceReconciler from "./missionPersistenceReconciler";
+import missionStore from "./missionStore";
+import { MISSION_STATES } from "./missionStates";
 
 import scanEventBus, {
   SCAN_EVENTS,
@@ -30,6 +35,13 @@ const TERMINAL_SCAN_EVENTS = [
   SCAN_EVENTS.SCAN_FAILED,
   SCAN_EVENTS.SCAN_CANCELLED,
 ];
+
+const TERMINAL_MISSION_STATE_BY_SCAN_STATE = {
+  completed: MISSION_STATES.COMPLETED,
+  failed: MISSION_STATES.FAILED,
+  cancelled: MISSION_STATES.CANCELLED,
+  interrupted: MISSION_STATES.FAILED,
+};
 
 const getScanIdentifiers = (scan) => {
   return [scan?.id, scan?.mongoId, scan?._id]
@@ -149,6 +161,63 @@ class MissionQueueManager {
     });
   }
 
+  getRuntimeScanForMission(mission) {
+    const matchingScans = scanRuntimeEngine
+      .getScans()
+      .filter((scan) => scanMatchesMission(scan, mission));
+
+    return (
+      matchingScans.find((scan) => {
+        const status = String(scan?.status ?? "").toLowerCase();
+
+        return status && !TERMINAL_SCAN_STATES.has(status);
+      }) ??
+      matchingScans[0] ??
+      null
+    );
+  }
+
+  async synchronizeMissionWithScan(mission, scan) {
+    if (!mission?.id || !scan) {
+      return;
+    }
+
+    const scanStatus = String(scan.status ?? "").toLowerCase();
+    const terminalMissionState =
+      TERMINAL_MISSION_STATE_BY_SCAN_STATE[scanStatus] ?? null;
+
+    const updates = {
+      scanId: scan.id ?? mission.scanId ?? null,
+      scanMongoId:
+        scan.mongoId ??
+        scan._id ??
+        mission.scanMongoId ??
+        null,
+    };
+
+    if (terminalMissionState) {
+      updates.state = terminalMissionState;
+      updates.progress =
+        scanStatus === "completed"
+          ? 100
+          : (scan.progress ?? mission.progress ?? 0);
+    } else {
+      updates.state = MISSION_STATES.RUNNING;
+      updates.progress = Math.max(
+        Number(mission.progress) || 0,
+        50,
+      );
+    }
+
+    missionStore.updateMission(mission.id, updates);
+    Object.assign(mission, updates);
+
+    const latestMission =
+      missionStore.getMission(mission.id) ?? mission;
+
+    await missionPersistenceReconciler.persistLatest(latestMission);
+  }
+
   waitForMissionScanTerminal(mission) {
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -229,14 +298,37 @@ class MissionQueueManager {
     if (
       !this.running ||
       this.processingMission ||
-      this.hasRuntimeScanInProgress()
+      !scanRuntimeEngine.isInitialized()
     ) {
       return;
     }
 
-    const mission = activateNextMission();
+    let mission = getActiveMission();
+    let existingScan = mission
+      ? this.getRuntimeScanForMission(mission)
+      : null;
 
     if (!mission) {
+      const nextMission = getMissionQueue()[0] ?? null;
+
+      if (!nextMission) {
+        return;
+      }
+
+      existingScan = this.getRuntimeScanForMission(nextMission);
+
+      if (this.hasRuntimeScanInProgress() && !existingScan) {
+        return;
+      }
+
+      mission = activateNextMission();
+
+      if (!mission) {
+        return;
+      }
+
+      existingScan = this.getRuntimeScanForMission(mission);
+    } else if (this.hasRuntimeScanInProgress() && !existingScan) {
       return;
     }
 
@@ -249,14 +341,61 @@ class MissionQueueManager {
       {
         source: "mission-queue-manager",
         missionId: mission.id,
+        recovered: Boolean(mission.queueRecovered),
         queuedRemaining: getMissionQueueMetrics().queued,
       },
     );
 
     try {
-      await simulateMissionLifecycle(mission);
+      if (existingScan) {
+        await this.synchronizeMissionWithScan(
+          mission,
+          existingScan,
+        );
 
-      terminalScan = await this.waitForMissionScanTerminal(mission);
+        scanEventBus.emitTelemetry(
+          `Recovered scan queue reattached to ${mission.target}`,
+          {
+            source: "mission-queue-manager",
+            missionId: mission.id,
+            scanId:
+              existingScan.mongoId ??
+              existingScan._id ??
+              existingScan.id ??
+              null,
+            status: existingScan.status ?? "unknown",
+          },
+        );
+
+        const existingStatus = String(
+          existingScan.status ?? "",
+        ).toLowerCase();
+
+        terminalScan = TERMINAL_SCAN_STATES.has(existingStatus)
+          ? existingScan
+          : await this.waitForMissionScanTerminal(mission);
+      } else {
+        if (mission.queueRecovered) {
+          scanEventBus.emitTelemetry(
+            `Restarting recovered pre-runtime mission for ${mission.target}`,
+            {
+              source: "mission-queue-manager",
+              missionId: mission.id,
+            },
+          );
+        }
+
+        await simulateMissionLifecycle(mission);
+
+        terminalScan = await this.waitForMissionScanTerminal(mission);
+      }
+
+      if (terminalScan && mission.queueRecovered) {
+        await this.synchronizeMissionWithScan(
+          mission,
+          terminalScan,
+        );
+      }
 
       scanEventBus.emitTelemetry(
         `Queued scan finished for ${mission.target}`,
