@@ -1,43 +1,9 @@
-import { useMemo } from "react";
-
 import useFindings from "../../hooks/useFindings";
 
 import "./TargetRiskPanel.css";
 
 function TargetRiskPanel() {
-  const { findings = [] } = useFindings();
-
-  const summary = useMemo(() => {
-    return findings.reduce(
-      (accumulator, finding) => {
-        const severity = finding.severity?.toLowerCase();
-
-        if (severity === "critical") {
-          accumulator.critical += 1;
-        }
-
-        if (severity === "high") {
-          accumulator.high += 1;
-        }
-
-        if (severity === "medium") {
-          accumulator.medium += 1;
-        }
-
-        if (severity === "low") {
-          accumulator.low += 1;
-        }
-
-        return accumulator;
-      },
-      {
-        critical: 0,
-        high: 0,
-        medium: 0,
-        low: 0,
-      },
-    );
-  }, [findings]);
+  const { severityMetrics: summary } = useFindings();
 
   return (
     <section className="dashboard-card target-risk-panel">

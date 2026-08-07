@@ -5,7 +5,7 @@ import useScans from "../../../hooks/useScans";
 import useFindings from "../../../hooks/useFindings";
 import useMissions from "../../../hooks/useMissions";
 import useAlerts from "../../../hooks/useAlerts";
-import useBackendHealth from "../../../hooks/useBackendHealth";
+import useBackendHealthContext from "../../../hooks/useBackendHealthContext";
 
 import {
   buildFocusUrl,
@@ -21,6 +21,8 @@ import "./Topbar.css";
 function Topbar({ onMenuToggle, sidebarOpen }) {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
+  const [findingSearchResults, setFindingSearchResults] = useState([]);
+  const [isFindingSearchLoading, setIsFindingSearchLoading] = useState(false);
   const [isManualBackendRefresh, setIsManualBackendRefresh] = useState(false);
 
   const [showSearchResults, setShowSearchResults] = useState(false);
@@ -55,10 +57,11 @@ function Topbar({ onMenuToggle, sidebarOpen }) {
 
   const notificationsRef = useRef(null);
   const settingsRef = useRef(null);
+  const findingSearchControllerRef = useRef(null);
 
   const { scans = [] } = useScans();
 
-  const { findings = [] } = useFindings();
+  const { searchFindings } = useFindings();
 
   const { missions = [] } = useMissions();
   const {
@@ -69,13 +72,14 @@ function Topbar({ onMenuToggle, sidebarOpen }) {
 
   const {
     health: backendHealth,
+    status: backendStatus,
     isChecking: backendIsChecking,
     isOnline: backendIsOnline,
     isOffline: backendIsOffline,
     error: backendError,
     lastCheckedAt: backendLastCheckedAt,
     refresh: refreshBackendHealth,
-  } = useBackendHealth();
+  } = useBackendHealthContext();
 
   const backendIndicatorState = isManualBackendRefresh
     ? "checking"
@@ -87,17 +91,21 @@ function Topbar({ onMenuToggle, sidebarOpen }) {
 
   const backendStatusLabel = isManualBackendRefresh
     ? "Checking Backend"
-    : backendIsOnline
-      ? "Backend Online"
-      : backendIsOffline
-        ? "Backend Offline"
-        : "Checking Backend";
+    : backendStatus === "recovering"
+      ? "Backend Recovering"
+      : backendIsOnline
+        ? "Backend Online"
+        : backendIsOffline
+          ? "Backend Offline"
+          : "Checking Backend";
 
   const backendStatusDetail =
-    backendError ??
-    (backendHealth?.service
-      ? `${backendHealth.service} responded successfully.`
-      : "Checking the SentinelScope backend connection.");
+    backendStatus === "recovering"
+      ? "Backend connection restored. SentinelScope services are recovering."
+      : backendError ??
+        (backendHealth?.service
+          ? `${backendHealth.service} responded successfully.`
+          : "Checking the SentinelScope backend connection.");
 
   const backendLastCheckedLabel = backendLastCheckedAt
     ? `Last checked ${backendLastCheckedAt.toLocaleTimeString()}`
@@ -131,19 +139,7 @@ function Topbar({ onMenuToggle, sidebarOpen }) {
           raw: scan,
         })),
 
-      findings: findings
-        .filter((finding) =>
-          [
-            finding?.title,
-            finding?.description,
-            finding?.severity,
-            finding?.target,
-          ]
-            .join(" ")
-            .toLowerCase()
-            .includes(query),
-        )
-        .map((finding) => ({
+      findings: findingSearchResults.map((finding) => ({
           id: getStableFindingId(finding),
           type: "finding",
           title: finding.title,
@@ -168,7 +164,7 @@ function Topbar({ onMenuToggle, sidebarOpen }) {
           raw: mission,
         })),
     };
-  }, [searchTerm, scans, findings, missions]);
+  }, [searchTerm, scans, findingSearchResults, missions]);
 
   const notificationAlerts = useMemo(() => {
     return [...alerts]
@@ -194,6 +190,12 @@ function Topbar({ onMenuToggle, sidebarOpen }) {
       })
       .slice(0, 6);
   }, [alerts]);
+
+  useEffect(() => {
+    return () => {
+      findingSearchControllerRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.motion = reducedMotion
@@ -266,12 +268,46 @@ function Topbar({ onMenuToggle, sidebarOpen }) {
     setShowSettings((current) => !current);
   };
 
-  const handleSearch = () => {
-    if (!searchTerm.trim()) {
+  const handleSearch = async () => {
+    const query = searchTerm.trim();
+
+    if (!query || isFindingSearchLoading) {
       return;
     }
 
-    setShowSearchResults(true);
+    findingSearchControllerRef.current?.abort();
+
+    const requestController = new AbortController();
+
+    findingSearchControllerRef.current = requestController;
+    setIsFindingSearchLoading(true);
+
+    try {
+      const results = await searchFindings(query, {
+        signal: requestController.signal,
+      });
+
+      if (requestController.signal.aborted) {
+        return;
+      }
+
+      setFindingSearchResults(results);
+      setShowSearchResults(true);
+    } catch (searchError) {
+      if (requestController.signal.aborted) {
+        return;
+      }
+
+      console.error("[Topbar] Finding search failed", searchError);
+
+      setFindingSearchResults([]);
+      setShowSearchResults(true);
+    } finally {
+      if (findingSearchControllerRef.current === requestController) {
+        findingSearchControllerRef.current = null;
+        setIsFindingSearchLoading(false);
+      }
+    }
   };
 
   const handleSearchResultSelect = (item) => {
@@ -341,10 +377,14 @@ function Topbar({ onMenuToggle, sidebarOpen }) {
             placeholder="Search targets, scans, findings, missions..."
             aria-label="Search platform"
             value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
+            disabled={isFindingSearchLoading}
+            onChange={(event) => {
+              setSearchTerm(event.target.value);
+              setFindingSearchResults([]);
+            }}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
-                handleSearch();
+                void handleSearch();
               }
             }}
           />
@@ -352,10 +392,14 @@ function Topbar({ onMenuToggle, sidebarOpen }) {
           <button
             className="topbar-search-button"
             type="button"
-            onClick={handleSearch}
+            onClick={() => {
+              void handleSearch();
+            }}
             aria-label="Search"
+            aria-busy={isFindingSearchLoading}
+            disabled={isFindingSearchLoading}
           >
-            🔍
+            {isFindingSearchLoading ? "…" : "🔍"}
           </button>
         </div>
 
@@ -400,7 +444,7 @@ function Topbar({ onMenuToggle, sidebarOpen }) {
                 <div className="topbar-notification-header">
                   <div>
                     <strong>Notifications</strong>
-                    <span>Priority security activity</span>
+                    <span>High/Critical alerts requiring attention</span>
                   </div>
 
                   <span className="topbar-notification-count">

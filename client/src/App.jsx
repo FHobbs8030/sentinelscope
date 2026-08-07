@@ -4,6 +4,7 @@ import { Route, Routes } from "react-router-dom";
 import AppShell from "./components/layout/AppShell/AppShell";
 
 import AlertsProvider from "./contexts/AlertsProvider";
+import BackendHealthProvider from "./contexts/BackendHealthProvider";
 import FindingsProvider from "./contexts/FindingsProvider";
 import MissionsProvider from "./contexts/MissionsProvider";
 import ScansProvider from "./contexts/ScansProvider";
@@ -31,6 +32,7 @@ function App() {
       <ScansProvider>
       <AlertsProvider>
         <FindingsProvider>
+          <BackendHealthProvider>
           <AppShell>
             <Routes>
               <Route path="/" element={<Dashboard />} />
@@ -71,6 +73,7 @@ function App() {
               <Route path="/targets" element={<Targets />} />
             </Routes>
           </AppShell>
+          </BackendHealthProvider>
         </FindingsProvider>
       </AlertsProvider>
       </ScansProvider>

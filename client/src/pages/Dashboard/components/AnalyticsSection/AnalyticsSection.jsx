@@ -3,7 +3,6 @@ import "./AnalyticsSection.css";
 import SeverityChartCard from "./SeverityChartCard";
 import TargetFindingsCard from "./TargetFindingsCard";
 import ScanDistributionCard from "./ScanDistributionCard";
-import SystemStatusCard from "./SystemStatusCard";
 
 function AnalyticsSection() {
   return (
@@ -12,7 +11,6 @@ function AnalyticsSection() {
         <SeverityChartCard />
         <TargetFindingsCard />
         <ScanDistributionCard />
-        <SystemStatusCard />
       </div>
     </section>
   );

@@ -8,32 +8,75 @@ import {
   getApiErrorMessage,
 } from "../services/api/apiClient";
 
-import { getFindings } from "../services/api/findingsApi";
+import {
+  getFindingsPage,
+  getFindingsSummary,
+} from "../services/api/findingsApi";
 
 import { subscribeToBackendRecovery } from "../services/runtime/backendConnectionEvents";
 
-import {
-  calculateFindingExposureScore,
-  calculateSeverityMetrics,
-} from "../utils/findings/severityMetrics";
+const DEFAULT_FINDINGS_PAGE_SIZE = 50;
+const FINDING_SEARCH_LIMIT = 25;
+
+const createEmptyFindingsSummary = () => ({
+  total: 0,
+  severityMetrics: {
+    total: 0,
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+    informational: 0,
+  },
+  statusMetrics: {},
+  findingExposureScore: 0,
+  uniqueTargets: 0,
+});
 
 function FindingsProvider({ children }) {
   const [findings, setFindings] = useState([]);
+  const [summary, setSummary] = useState(createEmptyFindingsSummary);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: DEFAULT_FINDINGS_PAGE_SIZE,
+    totalPages: 0,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState(null);
 
-  const loadFindings = useCallback(async (requestOptions = {}) => {
-    const { signal } = requestOptions;
-
+  const loadFindings = useCallback(async ({ query = {}, signal } = {}) => {
     try {
-      const findingData = await getFindings(requestOptions);
+      const normalizedQuery = {
+        page: query.page ?? 1,
+        limit: query.limit ?? DEFAULT_FINDINGS_PAGE_SIZE,
+        severity: query.severity,
+        status: query.status,
+        target: query.target,
+        search: query.search,
+      };
+
+      const summaryQuery = {
+        severity: normalizedQuery.severity,
+        status: normalizedQuery.status,
+        target: normalizedQuery.target,
+        search: normalizedQuery.search,
+      };
+
+      const [pageData, summaryData] = await Promise.all([
+        getFindingsPage(normalizedQuery, { signal }),
+        getFindingsSummary(summaryQuery, { signal }),
+      ]);
 
       if (signal?.aborted) {
         return false;
       }
 
-      setFindings(findingData);
+      setFindings(pageData.findings);
+      setPagination(pageData.meta);
+      setSummary(summaryData);
       setHasLoaded(true);
       setError(null);
 
@@ -64,18 +107,61 @@ function FindingsProvider({ children }) {
     }
   }, []);
 
+  const loadFindingsPage = useCallback(
+    async (query = {}) => {
+      setIsLoading(true);
+      setError(null);
+
+      return loadFindings({ query });
+    },
+    [loadFindings],
+  );
+
   const refreshFindings = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
-    return loadFindings();
-  }, [loadFindings]);
+    return loadFindings({
+      query: {
+        page: pagination.page,
+        limit: pagination.limit,
+      },
+    });
+  }, [loadFindings, pagination.limit, pagination.page]);
+
+  const searchFindings = useCallback(
+    async (search, requestOptions = {}) => {
+      const normalizedSearch = String(search || "").trim();
+
+      if (!normalizedSearch) {
+        return [];
+      }
+
+      const pageData = await getFindingsPage(
+        {
+          page: 1,
+          limit: requestOptions.limit ?? FINDING_SEARCH_LIMIT,
+          search: normalizedSearch,
+        },
+        {
+          signal: requestOptions.signal,
+        },
+      );
+
+      return pageData.findings;
+    },
+    [],
+  );
 
   useEffect(() => {
     const requestController = new AbortController();
 
     const requestTimer = window.setTimeout(() => {
       void loadFindings({
+        query: {
+          page: 1,
+          limit: DEFAULT_FINDINGS_PAGE_SIZE,
+        },
         signal: requestController.signal,
       });
     }, 0);
@@ -94,34 +180,33 @@ function FindingsProvider({ children }) {
     return unsubscribeRecovery;
   }, [refreshFindings]);
 
-  const severityMetrics = useMemo(() => {
-    return calculateSeverityMetrics(findings);
-  }, [findings]);
-
-  const findingExposureScore = useMemo(() => {
-    return calculateFindingExposureScore(findings);
-  }, [findings]);
-
   const contextValue = useMemo(
     () => ({
       findings,
       setFindings,
-      severityMetrics,
-      totalFindings: severityMetrics.total,
-      findingExposureScore,
+      pagination,
+      severityMetrics: summary.severityMetrics,
+      statusMetrics: summary.statusMetrics,
+      totalFindings: summary.total,
+      findingExposureScore: summary.findingExposureScore,
+      uniqueTargets: summary.uniqueTargets,
       isLoading,
       hasLoaded,
       error,
+      loadFindingsPage,
       refreshFindings,
+      searchFindings,
     }),
     [
       findings,
-      severityMetrics,
-      findingExposureScore,
+      pagination,
+      summary,
       isLoading,
       hasLoaded,
       error,
+      loadFindingsPage,
       refreshFindings,
+      searchFindings,
     ],
   );
 

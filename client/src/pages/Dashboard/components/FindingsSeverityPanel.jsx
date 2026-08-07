@@ -6,19 +6,12 @@ import highLowImage from "../../../assets/dashboard/severity-high-low.webp";
 import useFindings from "../../../hooks/useFindings";
 
 function FindingsSeverityPanel() {
-  const { findings } = useFindings();
+  const { severityMetrics } = useFindings();
 
-  const critical = findings.filter(
-    (finding) => finding.severity === "critical",
-  ).length;
-
-  const high = findings.filter((finding) => finding.severity === "high").length;
-
-  const medium = findings.filter(
-    (finding) => finding.severity === "medium",
-  ).length;
-
-  const low = findings.filter((finding) => finding.severity === "low").length;
+  const critical = severityMetrics.critical;
+  const high = severityMetrics.high;
+  const medium = severityMetrics.medium;
+  const low = severityMetrics.low;
 
   return (
     <section className="workspace-card findings-severity-panel">

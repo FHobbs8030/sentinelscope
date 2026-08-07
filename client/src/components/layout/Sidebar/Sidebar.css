@@ -276,13 +276,47 @@
 .sidebar-button.active {
   position: relative;
 
-  background: transparent;
+  width: calc(100% - 8px);
+  min-height: 46px;
 
-  border-color: transparent;
+  margin-inline: 4px;
+  padding: 10px 12px;
+
+  border-radius: 12px;
+
+  background:
+    linear-gradient(
+      100deg,
+      rgba(37, 99, 235, 0.2),
+      rgba(14, 165, 233, 0.08)
+    ),
+    rgba(15, 23, 42, 0.72);
+
+  border-color: rgba(96, 165, 250, 0.28);
 
   color: var(--color-text-primary);
 
-  box-shadow: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 22px rgba(2, 132, 199, 0.12),
+    0 0 18px rgba(59, 130, 246, 0.08);
+}
+
+.sidebar-button.active:hover {
+  background:
+    linear-gradient(
+      100deg,
+      rgba(37, 99, 235, 0.25),
+      rgba(14, 165, 233, 0.11)
+    ),
+    rgba(15, 23, 42, 0.78);
+
+  border-color: rgba(96, 165, 250, 0.38);
+
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 10px 26px rgba(2, 132, 199, 0.16),
+    0 0 22px rgba(59, 130, 246, 0.12);
 }
 
 .sidebar-button.active::before {
@@ -290,26 +324,37 @@
 
   position: absolute;
 
-  left: 2px;
-
-  top: 8px;
-  bottom: 8px;
+  left: 5px;
+  top: 50%;
 
   width: 3px;
+  height: 14px;
 
   border-radius: 999px;
 
-  background: #3b82f6;
+  background: linear-gradient(to bottom, #60a5fa, #22d3ee);
 
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+  box-shadow:
+    0 0 8px rgba(96, 165, 250, 0.72),
+    0 0 14px rgba(34, 211, 238, 0.34);
+
+  transform: translateY(-50%);
 }
 
 .sidebar-button.active .sidebar-icon {
   opacity: 1;
 
-  color: #60a5fa;
+  color: #7dd3fc;
 
-  filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.45));
+  filter: drop-shadow(0 0 9px rgba(59, 130, 246, 0.62));
+
+  transform: scale(1.06);
+}
+
+.sidebar-button.active .sidebar-label {
+  color: #f8fafc;
+
+  font-weight: 650;
 }
 
 .sidebar-label {
@@ -386,7 +431,15 @@
 .sidebar--collapsed .sidebar-button {
   justify-content: center;
 
-  padding: var(--space-3) 0;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+
+  margin-inline: auto;
+  padding: 0;
+
+  border-radius: 12px;
 }
 
 .sidebar--collapsed .sidebar-button.active {
@@ -394,7 +447,9 @@
 }
 
 .sidebar--collapsed .sidebar-button.active::before {
-  left: 0;
+  left: 4px;
+
+  height: 14px;
 }
 
 .sidebar--collapsed .sidebar-navigation {
@@ -459,7 +514,24 @@
   }
 
   .sidebar.sidebar--open .sidebar-button {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    min-height: 44px;
+
+    margin-inline: 0;
     padding: var(--space-3);
+
+    border-radius: var(--radius-md);
+  }
+
+  .sidebar.sidebar--open .sidebar-button.active {
+    width: calc(100% - 8px);
+
+    margin-inline: 4px;
+    padding: 10px 12px;
+
+    border-radius: 12px;
   }
 
   .sidebar.sidebar--open .sidebar-navigation {
@@ -499,7 +571,15 @@
   }
 
   .sidebar .sidebar-button {
-    padding: var(--space-3) 0;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+
+    margin-inline: auto;
+    padding: 0;
+
+    border-radius: 12px;
   }
 
   .sidebar .sidebar-navigation {
@@ -559,7 +639,24 @@
   }
 
   .sidebar.sidebar--open .sidebar-button {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    min-height: 44px;
+
+    margin-inline: 0;
     padding: var(--space-3);
+
+    border-radius: var(--radius-md);
+  }
+
+  .sidebar.sidebar--open .sidebar-button.active {
+    width: calc(100% - 8px);
+
+    margin-inline: 4px;
+    padding: 10px 12px;
+
+    border-radius: 12px;
   }
 
   .sidebar.sidebar--open .sidebar-navigation {
@@ -638,4 +735,77 @@
   .sidebar--open {
     width: 100%;
   }
+}
+
+/* SentinelScope shield brand mark */
+.sidebar-logo-icon {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+
+  color: transparent;
+  font-size: 0;
+  line-height: 0;
+  text-indent: -9999px;
+
+  border-radius: 16px;
+
+  background:
+    radial-gradient(
+      circle at 32% 24%,
+      rgba(255, 255, 255, 0.18),
+      transparent 40%
+    ),
+    linear-gradient(180deg, #4f91ff 0%, #295fd2 100%);
+
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -10px 18px rgba(7, 20, 48, 0.18),
+    0 12px 24px rgba(30, 64, 175, 0.24),
+    0 0 18px rgba(56, 189, 248, 0.1);
+}
+
+.sidebar-logo-icon::before {
+  content: "";
+
+  position: absolute;
+  inset: 5px;
+
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%20fill%3D%22none%22%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22shieldFill%22%20x1%3D%2232%22%20y1%3D%2210%22%20x2%3D%2232%22%20y2%3D%2256%22%20gradientUnits%3D%22userSpaceOnUse%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%232b63d8%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23163b96%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22shieldStroke%22%20x1%3D%2232%22%20y1%3D%2210%22%20x2%3D%2232%22%20y2%3D%2256%22%20gradientUnits%3D%22userSpaceOnUse%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23dff5ff%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%2382d8ff%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22sStroke%22%20x1%3D%2224%22%20y1%3D%2220%22%20x2%3D%2240%22%20y2%3D%2244%22%20gradientUnits%3D%22userSpaceOnUse%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23f8fdff%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23a4e7ff%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%3C%2Fdefs%3E%0A%0A%20%20%3Cpath%0A%20%20%20%20d%3D%22M32%208C26.8%2011.5%2021%2013.4%2016%2014.2V28.6C16%2040.2%2022.5%2049.7%2032%2055C41.5%2049.7%2048%2040.2%2048%2028.6V14.2C43%2013.4%2037.2%2011.5%2032%208Z%22%0A%20%20%20%20fill%3D%22url%28%23shieldFill%29%22%0A%20%20%20%20stroke%3D%22url%28%23shieldStroke%29%22%0A%20%20%20%20stroke-width%3D%222.6%22%0A%20%20%20%20stroke-linejoin%3D%22round%22%0A%20%20%2F%3E%0A%0A%20%20%3Cpath%0A%20%20%20%20d%3D%22M38.8%2021.5C37.1%2019.8%2034.9%2018.9%2032.1%2018.9C28.1%2018.9%2025.4%2020.8%2025.4%2023.8C25.4%2026.4%2027.2%2027.8%2031.1%2028.9C34.7%2029.9%2036.1%2030.8%2036.1%2032.6C36.1%2034.7%2034.2%2036%2031.1%2036C28.6%2036%2026.1%2035%2024.2%2033.3%22%0A%20%20%20%20stroke%3D%22url%28%23sStroke%29%22%0A%20%20%20%20stroke-width%3D%223.1%22%0A%20%20%20%20stroke-linecap%3D%22round%22%0A%20%20%20%20stroke-linejoin%3D%22round%22%0A%20%20%2F%3E%0A%20%20%3Cpath%0A%20%20%20%20d%3D%22M24.8%2040.2C26.7%2041.8%2029%2042.7%2031.9%2042.7C35.8%2042.7%2038.6%2040.7%2038.6%2037.8C38.6%2035.2%2036.7%2033.8%2032.8%2032.7%22%0A%20%20%20%20stroke%3D%22url%28%23sStroke%29%22%0A%20%20%20%20stroke-width%3D%223.1%22%0A%20%20%20%20stroke-linecap%3D%22round%22%0A%20%20%20%20stroke-linejoin%3D%22round%22%0A%20%20%2F%3E%0A%0A%20%20%0A%3C%2Fsvg%3E");
+
+  filter:
+    drop-shadow(0 1px 2px rgba(255, 255, 255, 0.18))
+    drop-shadow(0 0 8px rgba(96, 165, 250, 0.24));
+}
+
+.sidebar-logo-icon::after {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  background:
+    radial-gradient(
+      circle at 50% 16%,
+      rgba(255, 255, 255, 0.18),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at 50% 72%,
+      rgba(14, 165, 233, 0.08),
+      transparent 36%
+    );
+
+  pointer-events: none;
+}
+
+.sidebar-logo-icon:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -10px 18px rgba(7, 20, 48, 0.2),
+    0 14px 26px rgba(30, 64, 175, 0.28),
+    0 0 24px rgba(56, 189, 248, 0.14);
 }

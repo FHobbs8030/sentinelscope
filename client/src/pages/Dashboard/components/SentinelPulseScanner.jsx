@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import "./SentinelPulseScanner.css";
 
+import useMissionQueue from "../../../hooks/useMissionQueue";
 import useScans from "../../../hooks/useScans";
 
 const MINIMUM_ACTIVE_TIME = 2200;
@@ -11,8 +12,11 @@ const STOP_FADE_DURATION = 1500;
 
 function SentinelPulseScanner() {
   const { runningScans } = useScans();
+  const { metrics: queueMetrics } = useMissionQueue();
 
-  const runtimeIsActive = runningScans.length > 0;
+  const queueIsActive = queueMetrics.busy;
+  const runtimeIsActive =
+    runningScans.length > 0 || queueIsActive;
 
   const [visualPhase, setVisualPhase] = useState("idle");
 
@@ -119,11 +123,16 @@ function SentinelPulseScanner() {
       }
     };
   }, [runtimeIsActive]);
-  const scannerLabel = runtimeIsActive
-    ? `${runningScans.length} scan${
-        runningScans.length === 1 ? "" : "s"
-      } actively running`
-    : visualPhase === "coasting"
+  const scannerLabel =
+    runningScans.length > 0
+      ? `${runningScans.length} scan${
+          runningScans.length === 1 ? "" : "s"
+        } actively running`
+      : queueIsActive
+        ? `${queueMetrics.queued} queued scan${
+            queueMetrics.queued === 1 ? "" : "s"
+          }; scanner preparing next target`
+        : visualPhase === "coasting"
       ? "Scanner decelerating"
       : visualPhase === "centering"
         ? "Scanner returning to center"

@@ -24,7 +24,7 @@ function TargetFindingsCard() {
   return (
     <article className="analytics-card">
       <div className="analytics-card__header">
-        <h3 className="analytics-card__title">Target Findings</h3>
+        <h3 className="analytics-card__title">Recent Target Findings</h3>
       </div>
 
       <div className="analytics-card__content">
