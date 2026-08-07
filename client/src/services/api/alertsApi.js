@@ -1,5 +1,7 @@
 import { API_ERROR_CODES, ApiError, apiRequest } from "./apiClient";
 
+import { emitAlertCreated } from "../alertEvents";
+
 const ALERTS_PATH = "alerts";
 
 const buildAlertPath = (id, action = "") => {
@@ -32,11 +34,18 @@ const normalizeAlertCollection = (responseData) => {
 };
 
 export async function createAlert(alertData, requestOptions = {}) {
-  return apiRequest(ALERTS_PATH, {
+  const response = await apiRequest(ALERTS_PATH, {
     ...requestOptions,
     method: "POST",
     body: alertData,
   });
+
+  emitAlertCreated({
+    alert: response?.data ?? response ?? null,
+    requestedAlert: alertData,
+  });
+
+  return response;
 }
 
 export async function getAlerts(requestOptions = {}) {

@@ -73,6 +73,7 @@ function AlertOperationsSection({
   focusId,
 }) {
   const [copiedAlertId, setCopiedAlertId] = useState(null);
+  const [selectedAlertIds, setSelectedAlertIds] = useState([]);
   const copyTimerRef = useRef(null);
   const alertListRef = useRef(null);
   const handledFocusIdRef = useRef(null);
@@ -93,6 +94,10 @@ function AlertOperationsSection({
     investigate,
     resolve,
     close,
+    acknowledgeMany,
+    investigateMany,
+    resolveMany,
+    closeMany,
   } = useAlerts();
 
   useEffect(() => {
@@ -160,6 +165,106 @@ function AlertOperationsSection({
     focusedAlert && !focusedAlertAlreadyVisible
       ? [focusedAlert, ...baseVisibleAlerts].slice(0, 12)
       : baseVisibleAlerts;
+
+  const selectedAlertIdSet = new Set(selectedAlertIds);
+
+  const selectedAlerts = allActiveAlerts.filter((alert) => {
+    const alertId = getAlertId(alert);
+
+    return alertId && selectedAlertIdSet.has(String(alertId));
+  });
+
+  const visibleAlertIds = visibleAlerts
+    .map((alert) => getAlertId(alert))
+    .filter(Boolean)
+    .map(String);
+
+  const selectedVisibleAlertCount = visibleAlertIds.filter(
+    (alertId) => selectedAlertIdSet.has(alertId),
+  ).length;
+
+  const allVisibleSelected =
+    visibleAlertIds.length > 0 &&
+    selectedVisibleAlertCount === visibleAlertIds.length;
+
+  const someVisibleSelected =
+    selectedVisibleAlertCount > 0 && !allVisibleSelected;
+
+  const selectedByStatus = {
+    open: selectedAlerts.filter((alert) => alert.status === "open"),
+    acknowledged: selectedAlerts.filter(
+      (alert) => alert.status === "acknowledged",
+    ),
+    investigating: selectedAlerts.filter(
+      (alert) => alert.status === "investigating",
+    ),
+    resolved: selectedAlerts.filter(
+      (alert) => alert.status === "resolved",
+    ),
+  };
+
+  const toggleAlertSelection = (alertId) => {
+    if (!alertId) {
+      return;
+    }
+
+    const normalizedAlertId = String(alertId);
+
+    setSelectedAlertIds((currentAlertIds) => {
+      return currentAlertIds.includes(normalizedAlertId)
+        ? currentAlertIds.filter(
+            (currentAlertId) => currentAlertId !== normalizedAlertId,
+          )
+        : [...currentAlertIds, normalizedAlertId];
+    });
+  };
+
+  const toggleVisibleSelection = () => {
+    setSelectedAlertIds((currentAlertIds) => {
+      const currentAlertIdSet = new Set(currentAlertIds);
+      const visibleAreSelected =
+        visibleAlertIds.length > 0 &&
+        visibleAlertIds.every((alertId) =>
+          currentAlertIdSet.has(alertId),
+        );
+
+      if (visibleAreSelected) {
+        return currentAlertIds.filter(
+          (alertId) => !visibleAlertIds.includes(alertId),
+        );
+      }
+
+      visibleAlertIds.forEach((alertId) => {
+        currentAlertIdSet.add(alertId);
+      });
+
+      return Array.from(currentAlertIdSet);
+    });
+  };
+
+  const runBulkWorkflowAction = async (status, action) => {
+    const eligibleAlerts = selectedByStatus[status] ?? [];
+
+    const eligibleAlertIds = eligibleAlerts
+      .map((alert) => getAlertId(alert))
+      .filter(Boolean)
+      .map(String);
+
+    if (eligibleAlertIds.length === 0) {
+      return;
+    }
+
+    const result = await action(eligibleAlertIds);
+    const succeededIds = new Set(result?.succeededIds ?? []);
+
+    if (succeededIds.size > 0) {
+      setSelectedAlertIds((currentAlertIds) =>
+        currentAlertIds.filter(
+          (alertId) => !succeededIds.has(String(alertId)),
+        ),
+      );
+    }
+  };
 
   const retryLoad = () => {
     void refreshAlerts();
@@ -337,6 +442,127 @@ function AlertOperationsSection({
         </div>
       </header>
 
+      <div className="alert-operations-selection-bar">
+        <div className="alert-operations-selection-bar__primary">
+          <button
+            type="button"
+            role="checkbox"
+            className="alert-operations-selection-toggle"
+            disabled={visibleAlertIds.length === 0 || isUpdating}
+            aria-checked={
+              someVisibleSelected ? "mixed" : allVisibleSelected
+            }
+            onClick={toggleVisibleSelection}
+          >
+            <span
+              className={[
+                "alert-operations-selection-toggle__box",
+                allVisibleSelected
+                  ? "alert-operations-selection-toggle__box--selected"
+                  : "",
+                someVisibleSelected
+                  ? "alert-operations-selection-toggle__box--indeterminate"
+                  : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              aria-hidden="true"
+            >
+              {someVisibleSelected
+                ? "−"
+                : allVisibleSelected
+                  ? "✓"
+                  : ""}
+            </span>
+
+            {allVisibleSelected ? "Clear visible" : "Select all visible"}
+          </button>
+
+          {selectedAlerts.length > 0 ? (
+            <>
+              <span className="alert-operations-selection-count">
+                {selectedAlerts.length} selected
+              </span>
+
+              <button
+                type="button"
+                className="alert-operations-selection-clear"
+                disabled={isUpdating}
+                onClick={() => setSelectedAlertIds([])}
+              >
+                Clear selection
+              </button>
+            </>
+          ) : (
+            <span className="alert-operations-selection-hint">
+              Select alerts to manage compatible lifecycle steps together.
+            </span>
+          )}
+        </div>
+
+        {selectedAlerts.length > 0 ? (
+          <div
+            className="alert-operations-bulk-actions"
+            aria-label="Bulk alert lifecycle actions"
+          >
+            {selectedByStatus.open.length > 0 ? (
+              <button
+                type="button"
+                disabled={isUpdating}
+                onClick={() => {
+                  void runBulkWorkflowAction("open", acknowledgeMany);
+                }}
+              >
+                Acknowledge {selectedByStatus.open.length}
+              </button>
+            ) : null}
+
+            {selectedByStatus.acknowledged.length > 0 ? (
+              <button
+                type="button"
+                disabled={isUpdating}
+                onClick={() => {
+                  void runBulkWorkflowAction(
+                    "acknowledged",
+                    investigateMany,
+                  );
+                }}
+              >
+                Investigate {selectedByStatus.acknowledged.length}
+              </button>
+            ) : null}
+
+            {selectedByStatus.investigating.length > 0 ? (
+              <button
+                type="button"
+                disabled={isUpdating}
+                onClick={() => {
+                  void runBulkWorkflowAction(
+                    "investigating",
+                    resolveMany,
+                  );
+                }}
+              >
+                Resolve {selectedByStatus.investigating.length}
+              </button>
+            ) : null}
+
+            {selectedByStatus.resolved.length > 0 ? (
+              <button
+                type="button"
+                className="alert-operations-bulk-actions__close"
+                disabled={isUpdating}
+                onClick={() => {
+                  void runBulkWorkflowAction("resolved", closeMany);
+                }}
+              >
+                Close resolved {selectedByStatus.resolved.length}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
       {error ? (
         <div
           className="alert-operations-state alert-operations-state--error"
@@ -381,6 +607,8 @@ function AlertOperationsSection({
           const riskScore = getRiskScore(alert);
           const workflowActionLabel = getWorkflowActionLabel(alert.status);
           const relatedFindingsCount = alert.relatedFindings?.length ?? 0;
+          const isBulkSelected =
+            alertId && selectedAlertIdSet.has(String(alertId));
 
           return (
             <article
@@ -390,6 +618,9 @@ function AlertOperationsSection({
                 "alert-operations-card",
                 getCardSeverityClass(alert.severity),
                 isSelected ? "alert-operations-card--selected" : "",
+                isBulkSelected
+                  ? "alert-operations-card--bulk-selected"
+                  : "",
               ]
                 .filter(Boolean)
                 .join(" ")}
@@ -404,7 +635,37 @@ function AlertOperationsSection({
               <div className="alert-operations-card__accent" />
 
               <div className="alert-operations-card__header">
-                <div className="alert-operations-card__badges">
+                <div className="alert-operations-card__header-main">
+                  <label
+                    className="alert-operations-card__selector"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                    }}
+                    onKeyDown={(event) => {
+                      event.stopPropagation();
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={Boolean(isBulkSelected)}
+                      disabled={!alertId || isUpdating}
+                      aria-label={`Select ${
+                        alert.title || "security alert"
+                      } for bulk actions`}
+                      onChange={() => {
+                        toggleAlertSelection(alertId);
+                      }}
+                    />
+
+                    <span
+                      className="alert-operations-card__selector-box"
+                      aria-hidden="true"
+                    >
+                      {isBulkSelected ? "✓" : ""}
+                    </span>
+                  </label>
+
+                  <div className="alert-operations-card__badges">
                   <span className={getSeverityClass(alert.severity)}>
                     <span
                       className="alert-operations-severity__dot"
@@ -421,6 +682,7 @@ function AlertOperationsSection({
                   >
                     {formatStatusLabel(alert.status || "unknown")}
                   </span>
+                  </div>
                 </div>
 
                 <button

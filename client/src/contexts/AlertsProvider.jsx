@@ -17,6 +17,7 @@ import {
 } from "../services/api/apiClient";
 
 import { generateCorrelationAssessment } from "../services/intelligence/correlationEngine";
+import { subscribeToAlertCreated } from "../services/alertEvents";
 import { subscribeToBackendRecovery } from "../services/runtime/backendConnectionEvents";
 
 import {
@@ -105,6 +106,77 @@ function AlertsProvider({ children }) {
     [loadAlerts],
   );
 
+  const runAlertBulkAction = useCallback(
+    async (action, alertIds, failureLabel) => {
+      const normalizedAlertIds = [
+        ...new Set(
+          alertIds
+            .filter(Boolean)
+            .map((alertId) => String(alertId)),
+        ),
+      ];
+
+      if (normalizedAlertIds.length === 0) {
+        return {
+          succeededIds: [],
+          failedIds: [],
+        };
+      }
+
+      try {
+        setIsUpdating(true);
+        setError(null);
+
+        const results = await Promise.allSettled(
+          normalizedAlertIds.map((alertId) => action(alertId)),
+        );
+
+        const succeededIds = [];
+        const failedIds = [];
+
+        results.forEach((result, index) => {
+          const alertId = normalizedAlertIds[index];
+
+          if (result.status === "fulfilled") {
+            succeededIds.push(alertId);
+          } else {
+            failedIds.push(alertId);
+          }
+        });
+
+        await loadAlerts();
+
+        if (failedIds.length > 0) {
+          setError(
+            `${failedIds.length} of ${normalizedAlertIds.length} selected alerts could not be ${failureLabel}.`,
+          );
+        }
+
+        return {
+          succeededIds,
+          failedIds,
+        };
+      } catch (err) {
+        console.error("Failed to update selected alerts:", err);
+
+        setError(
+          getApiErrorMessage(
+            err,
+            "Unable to update the selected alerts. Try again.",
+          ),
+        );
+
+        return {
+          succeededIds: [],
+          failedIds: normalizedAlertIds,
+        };
+      } finally {
+        setIsUpdating(false);
+      }
+    },
+    [loadAlerts],
+  );
+
   const acknowledge = useCallback(
     async (alertId) => {
       return runAlertAction(
@@ -149,6 +221,50 @@ function AlertsProvider({ children }) {
     [runAlertAction],
   );
 
+  const acknowledgeMany = useCallback(
+    async (alertIds) => {
+      return runAlertBulkAction(
+        acknowledgeAlert,
+        alertIds,
+        "acknowledged",
+      );
+    },
+    [runAlertBulkAction],
+  );
+
+  const investigateMany = useCallback(
+    async (alertIds) => {
+      return runAlertBulkAction(
+        investigateAlert,
+        alertIds,
+        "moved into investigation",
+      );
+    },
+    [runAlertBulkAction],
+  );
+
+  const resolveMany = useCallback(
+    async (alertIds) => {
+      return runAlertBulkAction(
+        resolveAlert,
+        alertIds,
+        "resolved",
+      );
+    },
+    [runAlertBulkAction],
+  );
+
+  const closeMany = useCallback(
+    async (alertIds) => {
+      return runAlertBulkAction(
+        closeAlert,
+        alertIds,
+        "closed",
+      );
+    },
+    [runAlertBulkAction],
+  );
+
   const metrics = useMemo(() => {
     return calculateAlertMetrics(alerts);
   }, [alerts]);
@@ -180,6 +296,29 @@ function AlertsProvider({ children }) {
     return unsubscribeRecovery;
   }, [refreshAlerts]);
 
+  useEffect(() => {
+    let refreshTimerId = null;
+
+    const unsubscribeAlertCreated = subscribeToAlertCreated(() => {
+      if (refreshTimerId !== null) {
+        window.clearTimeout(refreshTimerId);
+      }
+
+      refreshTimerId = window.setTimeout(() => {
+        refreshTimerId = null;
+        void loadAlerts();
+      }, 120);
+    });
+
+    return () => {
+      unsubscribeAlertCreated();
+
+      if (refreshTimerId !== null) {
+        window.clearTimeout(refreshTimerId);
+      }
+    };
+  }, [loadAlerts]);
+
   const contextValue = useMemo(
     () => ({
       alerts,
@@ -196,6 +335,10 @@ function AlertsProvider({ children }) {
       investigate,
       resolve,
       close,
+      acknowledgeMany,
+      investigateMany,
+      resolveMany,
+      closeMany,
     }),
     [
       alerts,
@@ -211,6 +354,10 @@ function AlertsProvider({ children }) {
       investigate,
       resolve,
       close,
+      acknowledgeMany,
+      investigateMany,
+      resolveMany,
+      closeMany,
     ],
   );
 

@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import "./Dashboard.css";
+import "./DashboardGlassSystem.css";
 
 import DashboardSectionNav from "./components/DashboardSectionNav";
 import KpiSummarySection from "./components/KpiSummarySection";
 import SentinelPulseScanner from "./components/SentinelPulseScanner";
+import SystemStatusCard from "./components/AnalyticsSection/SystemStatusCard";
 
 import OperationalWorkspace from "./components/OperationalWorkspace";
 import AnalyticsWorkspace from "./components/AnalyticsWorkspace";
@@ -50,7 +52,7 @@ function Dashboard({ initialSection = "dashboard-overview" }) {
 
   const canonicalSelectedAlert = useMemo(() => {
     if (focusedAlert) {
-      return focusedAlert;
+      return focusedAlert.status === "closed" ? null : focusedAlert;
     }
 
     if (!selectedAlert) {
@@ -60,16 +62,17 @@ function Dashboard({ initialSection = "dashboard-overview" }) {
     const selectedAlertId = selectedAlert._id || selectedAlert.id;
 
     if (!selectedAlertId) {
-      return selectedAlert;
+      return selectedAlert.status === "closed" ? null : selectedAlert;
     }
 
-    return (
+    const canonicalAlert =
       alerts.find((alert) => {
         const alertId = alert._id || alert.id;
 
         return alertId && String(alertId) === String(selectedAlertId);
-      }) ?? selectedAlert
-    );
+      }) ?? selectedAlert;
+
+    return canonicalAlert.status === "closed" ? null : canonicalAlert;
   }, [alerts, focusedAlert, selectedAlert]);
 
   useEffect(() => {
@@ -186,6 +189,7 @@ function Dashboard({ initialSection = "dashboard-overview" }) {
   return (
     <div className="dashboard-shell">
       <DashboardSectionNav />
+      <SystemStatusCard />
       <SentinelPulseScanner />
 
       <div className="dashboard-main">

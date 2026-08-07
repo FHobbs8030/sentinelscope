@@ -1,0 +1,398 @@
+.system-status-card {
+  position: relative;
+  isolation: isolate;
+
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(0, 2.35fr);
+  align-items: center;
+
+  gap: 18px;
+
+  margin: 10px 24px 8px;
+  padding: 11px 14px;
+
+  overflow: hidden;
+
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  border-top-color: rgba(103, 232, 249, 0.34);
+  border-radius: 14px;
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.035),
+      rgba(255, 255, 255, 0.008)
+    ),
+    rgba(8, 18, 29, 0.78);
+
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 8px 22px rgba(0, 0, 0, 0.16);
+
+  -webkit-backdrop-filter: blur(12px) saturate(125%);
+  backdrop-filter: blur(12px) saturate(125%);
+
+  transition:
+    border-color 220ms ease,
+    box-shadow 220ms ease,
+    background 220ms ease;
+}
+
+.system-status-card::before {
+  content: "";
+
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+
+  height: 1px;
+
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(103, 232, 249, 0.22),
+    rgba(255, 255, 255, 0.22),
+    rgba(103, 232, 249, 0.22),
+    transparent
+  );
+
+  pointer-events: none;
+}
+
+.system-status-card--offline {
+  border-color: rgba(248, 113, 113, 0.28);
+  border-top-color: rgba(248, 113, 113, 0.5);
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(248, 113, 113, 0.035),
+      rgba(255, 255, 255, 0.006)
+    ),
+    rgba(20, 13, 22, 0.84);
+
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 22px rgba(0, 0, 0, 0.18),
+    0 0 20px rgba(239, 68, 68, 0.055);
+}
+
+.system-status-card--offline::before {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(248, 113, 113, 0.28),
+    rgba(254, 202, 202, 0.34),
+    rgba(248, 113, 113, 0.28),
+    transparent
+  );
+}
+
+.system-status-card--checking,
+.system-status-card--recovering {
+  border-color: rgba(250, 204, 21, 0.22);
+  border-top-color: rgba(250, 204, 21, 0.4);
+}
+
+.system-status-card--recovering {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(250, 204, 21, 0.028),
+      rgba(255, 255, 255, 0.006)
+    ),
+    rgba(18, 20, 22, 0.82);
+
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 22px rgba(0, 0, 0, 0.17),
+    0 0 18px rgba(234, 179, 8, 0.045);
+}
+
+.system-status-card__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  min-width: 0;
+
+  gap: 12px;
+}
+
+.system-status-card__heading {
+  min-width: 0;
+}
+
+.system-status-card__eyebrow {
+  display: block;
+
+  margin-bottom: 4px;
+
+  color: #718198;
+
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+
+  text-transform: uppercase;
+}
+
+.system-status-card__aggregate {
+  display: inline-flex;
+  align-items: center;
+
+  gap: 7px;
+
+  min-width: 0;
+
+  color: #e2e8f0;
+
+  font-size: 0.72rem;
+  font-weight: 750;
+
+  white-space: nowrap;
+}
+
+.system-status-card__aggregate--online {
+  color: #86efac;
+}
+
+.system-status-card__aggregate--offline {
+  color: #fca5a5;
+}
+
+.system-status-card__aggregate--checking,
+.system-status-card__aggregate--recovering {
+  color: #fde68a;
+}
+
+.system-status-card__aggregate-dot,
+.system-status-service__dot {
+  display: inline-block;
+
+  flex: 0 0 auto;
+
+  border-radius: 999px;
+}
+
+.system-status-card__aggregate-dot {
+  width: 8px;
+  height: 8px;
+}
+
+.system-status-card__aggregate-dot--online,
+.system-status-service__dot--online {
+  background: #22c55e;
+
+  box-shadow:
+    0 0 7px rgba(34, 197, 94, 0.72),
+    0 0 14px rgba(34, 197, 94, 0.24);
+}
+
+.system-status-card__aggregate-dot--offline,
+.system-status-service__dot--offline {
+  background: #f87171;
+
+  box-shadow:
+    0 0 7px rgba(248, 113, 113, 0.72),
+    0 0 14px rgba(239, 68, 68, 0.24);
+}
+
+.system-status-card__aggregate-dot--checking,
+.system-status-card__aggregate-dot--recovering,
+.system-status-service__dot--checking,
+.system-status-service__dot--degraded,
+.system-status-service__dot--recovering {
+  background: #facc15;
+
+  box-shadow:
+    0 0 7px rgba(250, 204, 21, 0.62),
+    0 0 14px rgba(234, 179, 8, 0.18);
+}
+
+.system-status-card__aggregate-dot--recovering,
+.system-status-service__dot--recovering {
+  animation: system-status-recovery-pulse 1.05s ease-in-out infinite;
+}
+
+@keyframes system-status-recovery-pulse {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: scale(0.9);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+.system-status-card__checked {
+  flex: 0 0 auto;
+
+  color: #8797aa;
+
+  font-size: 0.6rem;
+  font-weight: 700;
+
+  white-space: nowrap;
+}
+
+.system-status-card__services {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+
+  min-width: 0;
+
+  gap: 8px;
+}
+
+.system-status-service {
+  display: flex;
+  align-items: center;
+
+  min-width: 0;
+
+  gap: 9px;
+
+  padding: 8px 10px;
+
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 10px;
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.025),
+      rgba(255, 255, 255, 0.005)
+    ),
+    rgba(12, 24, 37, 0.52);
+
+  transition:
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+.system-status-service--offline {
+  border-color: rgba(248, 113, 113, 0.18);
+
+  background: rgba(127, 29, 29, 0.08);
+}
+
+.system-status-service--degraded,
+.system-status-service--checking,
+.system-status-service--recovering {
+  border-color: rgba(250, 204, 21, 0.15);
+
+  background: rgba(113, 63, 18, 0.055);
+}
+
+.system-status-service__dot {
+  width: 7px;
+  height: 7px;
+}
+
+.system-status-service__copy {
+  display: flex;
+  flex-direction: column;
+
+  min-width: 0;
+
+  gap: 2px;
+}
+
+.system-status-service__label {
+  overflow: hidden;
+
+  color: #94a3b8;
+
+  font-size: 0.59rem;
+  font-weight: 650;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.system-status-service__value {
+  overflow: hidden;
+
+  color: #e2e8f0;
+
+  font-size: 0.68rem;
+  font-weight: 750;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.system-status-service--online .system-status-service__value {
+  color: #86efac;
+}
+
+.system-status-service--offline .system-status-service__value {
+  color: #fca5a5;
+}
+
+.system-status-service--degraded .system-status-service__value,
+.system-status-service--checking .system-status-service__value,
+.system-status-service--recovering .system-status-service__value {
+  color: #fde68a;
+}
+
+@media (max-width: 1050px) {
+  .system-status-card {
+    grid-template-columns: 1fr;
+
+    gap: 10px;
+  }
+
+  .system-status-card__summary {
+    justify-content: flex-start;
+  }
+
+  .system-status-card__checked {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .system-status-card {
+    margin: 8px 12px 6px;
+    padding: 12px;
+  }
+
+  .system-status-card__services {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 440px) {
+  .system-status-card__summary {
+    align-items: flex-start;
+    flex-direction: column;
+
+    gap: 6px;
+  }
+
+  .system-status-card__checked {
+    margin-left: 0;
+  }
+
+  .system-status-card__services {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .system-status-card,
+  .system-status-service {
+    transition: none;
+  }
+
+  .system-status-card__aggregate-dot--recovering,
+  .system-status-service__dot--recovering {
+    animation: none;
+  }
+}

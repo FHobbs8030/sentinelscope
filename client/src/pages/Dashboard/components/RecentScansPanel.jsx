@@ -21,7 +21,7 @@ const getStableScanKey = (scan, index) => {
   return getStableScanId(scan) || `scan-${index}`;
 };
 
-function RecentScansPanel({ focusType, focusId }) {
+function RecentScansPanel({ focusType, focusId, onViewScan }) {
   const navigate = useNavigate();
 
   const { scans, isLoading, error, refreshScans } = useScans();
@@ -258,6 +258,8 @@ function RecentScansPanel({ focusType, focusId }) {
     if (!scanId) {
       return;
     }
+
+    onViewScan?.(scan);
 
     const params = new URLSearchParams({
       focus: "scan",

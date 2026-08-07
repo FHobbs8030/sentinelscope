@@ -4,7 +4,6 @@ import useFindings from "../../../hooks/useFindings";
 
 function FindingsOverviewSection() {
   const {
-    findings,
     severityMetrics,
     totalFindings,
     findingExposureScore,
@@ -177,7 +176,7 @@ function FindingsOverviewSection() {
         ))}
       </div>
 
-      {hasLoaded && findings.length === 0 ? (
+      {hasLoaded && totalFindings === 0 ? (
         <span className="findings-overview-empty-note">
           No persisted findings are currently available.
         </span>

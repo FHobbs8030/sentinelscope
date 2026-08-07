@@ -1,4 +1,7 @@
-import { enqueueMission } from "./missionQueue";
+import {
+  enqueueMission,
+  removeMissionFromQueue,
+} from "./missionQueue";
 
 import { MISSION_STATES } from "./missionStates";
 
@@ -26,6 +29,49 @@ export function createMission({ target, type, profile, severity }) {
 
     createdAt: new Date().toISOString(),
   };
+}
+
+export async function cancelQueuedMission(missionId) {
+  const mission = removeMissionFromQueue(missionId);
+
+  if (!mission) {
+    return false;
+  }
+
+  const queuedState = mission.state;
+
+  try {
+    const cancelledState = {
+      state: MISSION_STATES.CANCELLED,
+      progress: 0,
+    };
+
+    missionStore.updateMission(mission.id, cancelledState);
+    Object.assign(mission, cancelledState);
+
+    await missionPersistenceReconciler.persistLatest(mission);
+
+    scanEventBus.emitTelemetry(
+      `Queued scan removed for ${mission.target}`,
+      {
+        source: "recon-orchestrator",
+        missionId: mission.id,
+      },
+    );
+
+    return true;
+  } catch (error) {
+    const rollbackState = {
+      state: queuedState ?? MISSION_STATES.QUEUED,
+    };
+
+    missionStore.updateMission(mission.id, rollbackState);
+    Object.assign(mission, rollbackState);
+
+    enqueueMission(mission);
+
+    throw error;
+  }
 }
 
 export async function launchMission({ target, type, profile, severity }) {
