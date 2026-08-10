@@ -104,6 +104,37 @@ export function activateNextMission() {
   return activeMission;
 }
 
+export function activateMissionById(missionId, missionUpdates = {}) {
+  if (!missionId) {
+    return null;
+  }
+
+  if (activeMission) {
+    return String(activeMission.id) === String(missionId)
+      ? activeMission
+      : null;
+  }
+
+  const missionIndex = missionQueue.findIndex((mission) => {
+    return mission?.id && String(mission.id) === String(missionId);
+  });
+
+  if (missionIndex < 0) {
+    return null;
+  }
+
+  const [mission] = missionQueue.splice(missionIndex, 1);
+
+  activeMission = {
+    ...mission,
+    ...missionUpdates,
+  };
+
+  publishQueueState();
+
+  return activeMission;
+}
+
 export function clearActiveMission(missionId = null) {
   if (!activeMission) {
     return null;

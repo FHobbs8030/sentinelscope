@@ -1,5 +1,5 @@
 import {
-  activateNextMission,
+  activateMissionById,
   clearActiveMission,
   getActiveMission,
   getMissionQueue,
@@ -12,10 +12,9 @@ import missionPersistenceReconciler from "./missionPersistenceReconciler";
 import missionStore from "./missionStore";
 import { MISSION_STATES } from "./missionStates";
 
-import scanEventBus, {
-  SCAN_EVENTS,
-} from "../runtime/scanEventBus";
+import scanEventBus, { SCAN_EVENTS } from "../runtime/scanEventBus";
 import scanRuntimeEngine from "../runtime/scanRuntimeEngine";
+import { claimNextMission as claimNextMissionRecord } from "../api/missionsApi";
 
 import { emitScanQueueDrained } from "../scanQueueEvents";
 
@@ -44,15 +43,11 @@ const TERMINAL_MISSION_STATE_BY_SCAN_STATE = {
 };
 
 const getScanIdentifiers = (scan) => {
-  return [scan?.id, scan?.mongoId, scan?._id]
-    .filter(Boolean)
-    .map(String);
+  return [scan?.id, scan?.mongoId, scan?._id].filter(Boolean).map(String);
 };
 
 const getMissionScanIdentifiers = (mission) => {
-  return [mission?.scanId, mission?.scanMongoId]
-    .filter(Boolean)
-    .map(String);
+  return [mission?.scanId, mission?.scanMongoId].filter(Boolean).map(String);
 };
 
 const scanMatchesMission = (scan, mission) => {
@@ -76,10 +71,26 @@ const scanMatchesMission = (scan, mission) => {
   );
 };
 
+const getClaimedMissionId = (mission) => {
+  return mission?.clientMissionId ?? mission?.id ?? mission?._id ?? null;
+};
+
+const buildClaimedMissionUpdates = (mission) => {
+  return {
+    mongoId: mission?.mongoId ?? mission?._id ?? null,
+    state: mission?.state ?? MISSION_STATES.INITIALIZING,
+    progress: mission?.progress ?? 0,
+    scanId: mission?.scanId ?? null,
+    scanMongoId: mission?.scanMongoId ?? null,
+    claimedAt: mission?.claimedAt ?? null,
+  };
+};
+
 class MissionQueueManager {
   constructor() {
     this.running = false;
     this.processingMission = false;
+    this.claimingMission = false;
 
     this.intervalId = null;
     this.processTimerId = null;
@@ -142,6 +153,7 @@ class MissionQueueManager {
     if (
       !this.running ||
       this.processingMission ||
+      this.claimingMission ||
       this.processTimerId !== null
     ) {
       return;
@@ -188,11 +200,7 @@ class MissionQueueManager {
 
     const updates = {
       scanId: scan.id ?? mission.scanId ?? null,
-      scanMongoId:
-        scan.mongoId ??
-        scan._id ??
-        mission.scanMongoId ??
-        null,
+      scanMongoId: scan.mongoId ?? scan._id ?? mission.scanMongoId ?? null,
     };
 
     if (terminalMissionState) {
@@ -203,17 +211,13 @@ class MissionQueueManager {
           : (scan.progress ?? mission.progress ?? 0);
     } else {
       updates.state = MISSION_STATES.RUNNING;
-      updates.progress = Math.max(
-        Number(mission.progress) || 0,
-        50,
-      );
+      updates.progress = Math.max(Number(mission.progress) || 0, 50);
     }
 
     missionStore.updateMission(mission.id, updates);
     Object.assign(mission, updates);
 
-    const latestMission =
-      missionStore.getMission(mission.id) ?? mission;
+    const latestMission = missionStore.getMission(mission.id) ?? mission;
 
     await missionPersistenceReconciler.persistLatest(latestMission);
   }
@@ -270,10 +274,7 @@ class MissionQueueManager {
         },
       );
 
-      pollId = window.setInterval(
-        inspectRuntime,
-        SCAN_TERMINAL_POLL_MS,
-      );
+      pollId = window.setInterval(inspectRuntime, SCAN_TERMINAL_POLL_MS);
 
       timeoutId = window.setTimeout(() => {
         if (settled) {
@@ -298,32 +299,73 @@ class MissionQueueManager {
     if (
       !this.running ||
       this.processingMission ||
+      this.claimingMission ||
       !scanRuntimeEngine.isInitialized()
     ) {
       return;
     }
 
     let mission = getActiveMission();
-    let existingScan = mission
-      ? this.getRuntimeScanForMission(mission)
-      : null;
+    let existingScan = mission ? this.getRuntimeScanForMission(mission) : null;
 
     if (!mission) {
-      const nextMission = getMissionQueue()[0] ?? null;
-
-      if (!nextMission) {
+      if (getMissionQueue().length === 0) {
         return;
       }
 
-      existingScan = this.getRuntimeScanForMission(nextMission);
-
-      if (this.hasRuntimeScanInProgress() && !existingScan) {
+      if (this.hasRuntimeScanInProgress()) {
         return;
       }
 
-      mission = activateNextMission();
+      let claimResponse;
+
+      this.claimingMission = true;
+
+      try {
+        claimResponse = await claimNextMissionRecord();
+      } catch (error) {
+        console.error(
+          "[MissionQueueManager] Failed to claim mission from backend:",
+          error,
+        );
+
+        scanEventBus.emitTelemetry("Backend mission queue claim failed", {
+          source: "mission-queue-manager",
+          error: error?.message ?? "Unknown queue claim failure",
+        });
+
+        return;
+      } finally {
+        this.claimingMission = false;
+      }
+
+      if (claimResponse?.message !== "Mission claimed") {
+        return;
+      }
+
+      const claimedMission = claimResponse?.data ?? null;
+      const claimedMissionId = getClaimedMissionId(claimedMission);
+
+      if (!claimedMission || !claimedMissionId) {
+        console.error(
+          "[MissionQueueManager] Backend claim response did not include a valid mission",
+          claimResponse,
+        );
+
+        return;
+      }
+
+      const claimedMissionUpdates = buildClaimedMissionUpdates(claimedMission);
+
+      missionStore.updateMission(claimedMissionId, claimedMissionUpdates);
+
+      mission = activateMissionById(claimedMissionId, claimedMissionUpdates);
 
       if (!mission) {
+        console.error(
+          `[MissionQueueManager] Backend claimed mission ${claimedMissionId}, but it was not available in the local queue`,
+        );
+
         return;
       }
 
@@ -336,22 +378,16 @@ class MissionQueueManager {
 
     let terminalScan = null;
 
-    scanEventBus.emitTelemetry(
-      `Scan queue activated ${mission.target}`,
-      {
-        source: "mission-queue-manager",
-        missionId: mission.id,
-        recovered: Boolean(mission.queueRecovered),
-        queuedRemaining: getMissionQueueMetrics().queued,
-      },
-    );
+    scanEventBus.emitTelemetry(`Scan queue activated ${mission.target}`, {
+      source: "mission-queue-manager",
+      missionId: mission.id,
+      recovered: Boolean(mission.queueRecovered),
+      queuedRemaining: getMissionQueueMetrics().queued,
+    });
 
     try {
       if (existingScan) {
-        await this.synchronizeMissionWithScan(
-          mission,
-          existingScan,
-        );
+        await this.synchronizeMissionWithScan(mission, existingScan);
 
         scanEventBus.emitTelemetry(
           `Recovered scan queue reattached to ${mission.target}`,
@@ -367,9 +403,7 @@ class MissionQueueManager {
           },
         );
 
-        const existingStatus = String(
-          existingScan.status ?? "",
-        ).toLowerCase();
+        const existingStatus = String(existingScan.status ?? "").toLowerCase();
 
         terminalScan = TERMINAL_SCAN_STATES.has(existingStatus)
           ? existingScan
@@ -391,26 +425,20 @@ class MissionQueueManager {
       }
 
       if (terminalScan && mission.queueRecovered) {
-        await this.synchronizeMissionWithScan(
-          mission,
-          terminalScan,
-        );
+        await this.synchronizeMissionWithScan(mission, terminalScan);
       }
 
-      scanEventBus.emitTelemetry(
-        `Queued scan finished for ${mission.target}`,
-        {
-          source: "mission-queue-manager",
-          missionId: mission.id,
-          scanId:
-            terminalScan?.mongoId ??
-            terminalScan?._id ??
-            terminalScan?.id ??
-            null,
-          status: terminalScan?.status ?? "unknown",
-          queuedRemaining: getMissionQueueMetrics().queued,
-        },
-      );
+      scanEventBus.emitTelemetry(`Queued scan finished for ${mission.target}`, {
+        source: "mission-queue-manager",
+        missionId: mission.id,
+        scanId:
+          terminalScan?.mongoId ??
+          terminalScan?._id ??
+          terminalScan?.id ??
+          null,
+        status: terminalScan?.status ?? "unknown",
+        queuedRemaining: getMissionQueueMetrics().queued,
+      });
     } catch (error) {
       console.error(
         `[MissionQueueManager] Failed processing ${mission.target}:`,
