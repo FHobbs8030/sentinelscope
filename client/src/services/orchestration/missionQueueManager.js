@@ -14,10 +14,19 @@ import { MISSION_STATES } from "./missionStates";
 
 import scanEventBus, { SCAN_EVENTS } from "../runtime/scanEventBus";
 import scanRuntimeEngine from "../runtime/scanRuntimeEngine";
-import { claimNextMission as claimNextMissionRecord } from "../api/missionsApi";
+import {
+  acquireMissionRuntimeLease,
+  claimNextMission as claimNextMissionRecord,
+} from "../api/missionsApi";
 
 import { emitScanQueueDrained } from "../scanQueueEvents";
+import {
+  clearMissionRuntimeOwned,
+  getRuntimeOwnerId,
+  markMissionRuntimeOwned,
+} from "./runtimeOwnership";
 
+const RUNTIME_LEASE_HEARTBEAT_MS = 2000;
 const SAFETY_PROCESS_INTERVAL_MS = 1000;
 const SCAN_TERMINAL_POLL_MS = 250;
 const MAX_SCAN_WAIT_MS = 60 * 60 * 1000;
@@ -97,6 +106,11 @@ class MissionQueueManager {
 
     this.unsubscribeQueue = null;
     this.unsubscribeTerminalEvents = null;
+
+    this.runtimeLeaseHeartbeatId = null;
+    this.runtimeLeaseMissionId = null;
+    this.runtimeLeaseRenewing = false;
+    this.runtimeOwnerId = getRuntimeOwnerId();
   }
 
   start() {
@@ -147,6 +161,7 @@ class MissionQueueManager {
 
     this.unsubscribeTerminalEvents?.();
     this.unsubscribeTerminalEvents = null;
+    this.stopRuntimeLeaseHeartbeat();
   }
 
   scheduleProcess() {
@@ -295,6 +310,89 @@ class MissionQueueManager {
     });
   }
 
+  stopRuntimeLeaseHeartbeat() {
+    if (this.runtimeLeaseHeartbeatId !== null) {
+      window.clearInterval(this.runtimeLeaseHeartbeatId);
+      this.runtimeLeaseHeartbeatId = null;
+    }
+
+    if (this.runtimeLeaseMissionId) {
+      clearMissionRuntimeOwned(this.runtimeLeaseMissionId);
+      this.runtimeLeaseMissionId = null;
+    }
+  }
+
+  async acquireRuntimeOwnership(mission) {
+    if (!mission?.mongoId || !mission?.id) {
+      return false;
+    }
+
+    try {
+      const response = await acquireMissionRuntimeLease(
+        mission.mongoId,
+        this.runtimeOwnerId,
+      );
+
+      const ownsLease =
+        response?.message === "Runtime lease acquired" &&
+        response?.data?.runtimeOwnerId === this.runtimeOwnerId;
+
+      if (!ownsLease) {
+        clearMissionRuntimeOwned(mission.id);
+        return false;
+      }
+
+      markMissionRuntimeOwned(mission.id);
+      this.runtimeLeaseMissionId = mission.id;
+
+      return true;
+    } catch (error) {
+      clearMissionRuntimeOwned(mission.id);
+
+      console.error(
+        `[MissionQueueManager] Failed to acquire runtime ownership for ${mission.target}:`,
+        error,
+      );
+
+      return false;
+    }
+  }
+
+  startRuntimeLeaseHeartbeat(mission) {
+    this.stopRuntimeLeaseHeartbeat();
+
+    markMissionRuntimeOwned(mission.id);
+    this.runtimeLeaseMissionId = mission.id;
+
+    this.runtimeLeaseHeartbeatId = window.setInterval(async () => {
+      if (this.runtimeLeaseRenewing) {
+        return;
+      }
+
+      this.runtimeLeaseRenewing = true;
+
+      try {
+        const stillOwnsRuntime = await this.acquireRuntimeOwnership(mission);
+
+        if (!stillOwnsRuntime) {
+          this.stopRuntimeLeaseHeartbeat();
+
+          scanEventBus.emitTelemetry(
+            `Runtime ownership lost for ${mission.target}`,
+            {
+              source: "mission-queue-manager",
+              missionId: mission.id,
+            },
+          );
+
+          this.scheduleProcess();
+        }
+      } finally {
+        this.runtimeLeaseRenewing = false;
+      }
+    }, RUNTIME_LEASE_HEARTBEAT_MS);
+  }
+
   async processNextMission() {
     if (
       !this.running ||
@@ -376,6 +474,25 @@ class MissionQueueManager {
 
     this.processingMission = true;
 
+    const ownsRuntime = await this.acquireRuntimeOwnership(mission);
+
+    if (!ownsRuntime) {
+      this.processingMission = false;
+
+      scanEventBus.emitTelemetry(
+        `Runtime execution deferred for ${mission.target}`,
+        {
+          source: "mission-queue-manager",
+          missionId: mission.id,
+          reason: "runtime-lease-owned-by-another-browser",
+        },
+      );
+
+      return;
+    }
+
+    this.startRuntimeLeaseHeartbeat(mission);
+
     let terminalScan = null;
 
     scanEventBus.emitTelemetry(`Scan queue activated ${mission.target}`, {
@@ -428,6 +545,21 @@ class MissionQueueManager {
         await this.synchronizeMissionWithScan(mission, terminalScan);
       }
 
+      if (terminalScan) {
+        const terminalPersisted = await scanRuntimeEngine.persistScan(
+          terminalScan,
+          {
+            force: true,
+          },
+        );
+
+        if (!terminalPersisted) {
+          throw new Error(
+            `Failed to confirm terminal scan persistence for ${mission.target}.`,
+          );
+        }
+      }
+
       scanEventBus.emitTelemetry(`Queued scan finished for ${mission.target}`, {
         source: "mission-queue-manager",
         missionId: mission.id,
@@ -454,6 +586,7 @@ class MissionQueueManager {
         },
       );
     } finally {
+      this.stopRuntimeLeaseHeartbeat();
       clearActiveMission(mission.id);
       this.processingMission = false;
 

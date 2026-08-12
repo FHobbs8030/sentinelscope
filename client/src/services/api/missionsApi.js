@@ -29,6 +29,20 @@ export async function claimNextMission(requestOptions = {}) {
   });
 }
 
+export async function acquireMissionRuntimeLease(
+  id,
+  runtimeOwnerId,
+  requestOptions = {},
+) {
+  return apiRequest(`${buildMissionPath(id)}/runtime/lease`, {
+    ...requestOptions,
+    method: "POST",
+    body: {
+      runtimeOwnerId,
+    },
+  });
+}
+
 export async function updateMission(id, updates, requestOptions = {}) {
   return apiRequest(buildMissionPath(id), {
     ...requestOptions,

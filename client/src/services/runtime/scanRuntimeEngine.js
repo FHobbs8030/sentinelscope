@@ -12,6 +12,7 @@ import { createScan, updateScan } from "../api/scansApi";
 import { createFindingsBatch } from "../api/findingsApi";
 import { createAlert } from "../api/alertsApi";
 import missionPersistenceReconciler from "../orchestration/missionPersistenceReconciler";
+import { ownsMissionRuntime } from "../orchestration/runtimeOwnership";
 import { generateThreatIntelligence } from "../intelligence/threatIntelligenceEngine";
 import { generateThreatPrediction } from "../intelligence/threatPredictionEngine";
 import { calculateRiskScore } from "../intelligence/riskAssessmentEngine";
@@ -560,6 +561,10 @@ class ScanRuntimeEngine {
   updateActiveScans() {
     const updatedScans = this.scans.map((scan) => {
       if (isTerminalScanState(scan.status)) {
+        return scan;
+      }
+
+      if (scan.missionId && !ownsMissionRuntime(scan.missionId)) {
         return scan;
       }
 
