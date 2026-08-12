@@ -2,12 +2,22 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { API_ERROR_CODES, ApiError } from "../services/api/apiClient";
 
-import { getMissions } from "../services/api/missionsApi";
+import { getMissionQueueState, getMissions } from "../services/api/missionsApi";
 
 import { recoverMissions } from "../services/orchestration/missionRecovery";
 import missionStore from "../services/orchestration/missionStore";
 
 import { subscribeToBackendRecovery } from "../services/runtime/backendConnectionEvents";
+
+const normalizeMission = (mission) => {
+  const mongoId = mission.mongoId ?? mission._id ?? null;
+
+  return {
+    ...mission,
+    id: mission.clientMissionId ?? mission.id ?? mongoId,
+    mongoId,
+  };
+};
 
 const normalizeMissionCollection = (responseData) => {
   const missionData = Array.isArray(responseData)
@@ -24,15 +34,47 @@ const normalizeMissionCollection = (responseData) => {
     );
   }
 
-  return missionData.map((mission) => {
-    const mongoId = mission.mongoId ?? mission._id ?? null;
+  return missionData.map(normalizeMission);
+};
 
-    return {
-      ...mission,
-      id: mission.clientMissionId ?? mission.id ?? mongoId,
-      mongoId,
-    };
-  });
+const normalizeMissionQueueState = (responseData) => {
+  const queueData = responseData?.data ?? responseData;
+
+  if (
+    !queueData ||
+    typeof queueData !== "object" ||
+    !Array.isArray(queueData.queuedMissions)
+  ) {
+    throw new ApiError(
+      "SentinelScope API returned an invalid mission queue state.",
+      {
+        code: API_ERROR_CODES.INVALID_RESPONSE,
+        details: responseData,
+      },
+    );
+  }
+
+  if (
+    queueData.activeMission !== null &&
+    queueData.activeMission !== undefined &&
+    typeof queueData.activeMission !== "object"
+  ) {
+    throw new ApiError(
+      "SentinelScope API returned an invalid active mission.",
+      {
+        code: API_ERROR_CODES.INVALID_RESPONSE,
+        details: responseData,
+      },
+    );
+  }
+
+  return {
+    ...queueData,
+    activeMission: queueData.activeMission
+      ? normalizeMission(queueData.activeMission)
+      : null,
+    queuedMissions: queueData.queuedMissions.map(normalizeMission),
+  };
 };
 
 export default function useMissionsState() {
@@ -48,13 +90,34 @@ export default function useMissionsState() {
         return false;
       }
 
-      const normalizedMissions = normalizeMissionCollection(response);
+     const normalizedMissions = normalizeMissionCollection(response);
 
-      missionStore.setMissions(normalizedMissions);
+     missionStore.setMissions(normalizedMissions);
 
-      recoverMissions(normalizedMissions);
+     let normalizedQueueState = null;
 
-      return true;
+     try {
+       const queueResponse = await getMissionQueueState(requestOptions);
+
+       if (signal?.aborted) {
+         return false;
+       }
+
+       normalizedQueueState = normalizeMissionQueueState(queueResponse);
+     } catch (error) {
+       if (signal?.aborted) {
+         return false;
+       }
+
+       console.warn(
+         "[useMissions] Failed to hydrate backend queue state; using mission recovery fallback",
+         error,
+       );
+     }
+
+     recoverMissions(normalizedMissions, normalizedQueueState);
+
+     return true;
     } catch (error) {
       if (signal?.aborted) {
         return false;

@@ -7,6 +7,8 @@ import RecentScansPanel from "./RecentScansPanel";
 import ScanResultsModal from "./ScanResultsModal";
 import FindingsSeverityPanel from "./FindingsSeverityPanel";
 import OperationsSummaryPanel from "./OperationsSummaryPanel";
+import { ownsMissionRuntime } from "../../../services/orchestration/runtimeOwnership";
+import { TERMINAL_SCAN_STATES } from "../../../services/runtime/scanStateMachine";
 
 import ActivityFeed from "../../../components/ActivityFeed";
 
@@ -82,6 +84,7 @@ function OperationalWorkspace({ focusType, focusId }) {
   const autoOpenTimerRef = useRef(null);
   const settleTimerRef = useRef(null);
   const handledExternalFocusRef = useRef(null);
+  const observedActiveScanIdsRef = useRef(new Set());
   const isMountedRef = useRef(true);
 
   const totalTargets = new Set(scans.map((scan) => scan.target).filter(Boolean))
@@ -195,6 +198,33 @@ function OperationalWorkspace({ focusType, focusId }) {
 
     return unsubscribeQueueDrained;
   }, [handleScanFinished]);
+
+  useEffect(() => {
+    scans.forEach((scan) => {
+      if (!scan?.id || !scan?.missionId) {
+        return;
+      }
+
+      const scanId = String(scan.id);
+      const isTerminal = TERMINAL_SCAN_STATES.includes(scan.status);
+
+      if (!isTerminal) {
+        if (!ownsMissionRuntime(scan.missionId)) {
+          observedActiveScanIdsRef.current.add(scanId);
+        }
+
+        return;
+      }
+
+      if (!observedActiveScanIdsRef.current.has(scanId)) {
+        return;
+      }
+
+      observedActiveScanIdsRef.current.delete(scanId);
+
+      handleScanFinished(scan);
+    });
+  }, [handleScanFinished, scans]);
 
   useEffect(() => {
     isMountedRef.current = true;

@@ -13,6 +13,8 @@ import { subscribeToBackendRecovery } from "../services/runtime/backendConnectio
 import { bootstrapRuntime } from "../services/runtime/runtimeBootstrap";
 import scanRuntimeEngine from "../services/runtime/scanRuntimeEngine";
 import { TERMINAL_SCAN_STATES } from "../services/runtime/scanStateMachine";
+import { ownsMissionRuntime } from "../services/orchestration/runtimeOwnership";
+import { clearActiveMission } from "../services/orchestration/missionQueue";
 
 import { rebuildRuntimeScans } from "./runtimeRecovery";
 
@@ -25,6 +27,8 @@ const ACTIVE_SCAN_STATES = [
   "exploitation",
   "reporting",
 ];
+
+const OBSERVER_SCAN_REFRESH_MS = 2000;
 
 const useScansState = () => {
   const [scans, setScans] = useState([]);
@@ -260,6 +264,100 @@ const useScansState = () => {
 
     return unsubscribeRecovery;
   }, [refreshScans]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let requestInFlight = false;
+
+    const synchronizeObserverScans = async () => {
+      if (requestInFlight) {
+        return;
+      }
+
+      const currentScans = scanRuntimeEngine.getScans();
+
+      const hasObservedActiveScan = currentScans.some((scan) => {
+        return (
+          scan.missionId &&
+          ACTIVE_SCAN_STATES.includes(scan.status) &&
+          !ownsMissionRuntime(scan.missionId)
+        );
+      });
+
+      if (!hasObservedActiveScan) {
+        return;
+      }
+
+      requestInFlight = true;
+
+      try {
+        const persistedScans = await getScans();
+
+        if (cancelled) {
+          return;
+        }
+
+        const persistedRuntimeScans = rebuildRuntimeScans(persistedScans);
+
+        const persistedById = new Map(
+          persistedRuntimeScans.map((scan) => [String(scan.id), scan]),
+        );
+
+        let changed = false;
+
+        const synchronizedScans = currentScans.map((scan) => {
+          if (!scan.missionId || ownsMissionRuntime(scan.missionId)) {
+            return scan;
+          }
+
+          const persistedScan = persistedById.get(String(scan.id));
+
+          if (!persistedScan) {
+            return scan;
+          }
+
+          const observerReachedTerminal =
+            ACTIVE_SCAN_STATES.includes(scan.status) &&
+            TERMINAL_SCAN_STATES.includes(persistedScan.status);
+
+          if (observerReachedTerminal) {
+            clearActiveMission(scan.missionId);
+          }
+
+          if (
+            persistedScan.status === scan.status &&
+            persistedScan.progress === scan.progress &&
+            persistedScan.updatedAt === scan.updatedAt
+          ) {
+            return scan;
+          }
+
+          changed = true;
+
+          return persistedScan;
+        });
+
+        if (changed) {
+          scanRuntimeEngine.setScans(synchronizedScans);
+        }
+      } catch (err) {
+        console.error("Failed to synchronize observer scan telemetry:", err);
+      } finally {
+        requestInFlight = false;
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void synchronizeObserverScans();
+    }, OBSERVER_SCAN_REFRESH_MS);
+
+    void synchronizeObserverScans();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   useEffect(() => {
     const unsubscribeRuntime = scanRuntimeEngine.subscribe((updatedScans) => {

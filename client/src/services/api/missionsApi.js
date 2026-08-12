@@ -18,6 +18,31 @@ export async function getMissions(requestOptions = {}) {
   return apiRequest(MISSIONS_PATH, requestOptions);
 }
 
+export async function getMissionQueueState(requestOptions = {}) {
+  return apiRequest(`${MISSIONS_PATH}/queue/state`, requestOptions);
+}
+
+export async function claimNextMission(requestOptions = {}) {
+  return apiRequest(`${MISSIONS_PATH}/queue/claim`, {
+    ...requestOptions,
+    method: "POST",
+  });
+}
+
+export async function acquireMissionRuntimeLease(
+  id,
+  runtimeOwnerId,
+  requestOptions = {},
+) {
+  return apiRequest(`${buildMissionPath(id)}/runtime/lease`, {
+    ...requestOptions,
+    method: "POST",
+    body: {
+      runtimeOwnerId,
+    },
+  });
+}
+
 export async function updateMission(id, updates, requestOptions = {}) {
   return apiRequest(buildMissionPath(id), {
     ...requestOptions,

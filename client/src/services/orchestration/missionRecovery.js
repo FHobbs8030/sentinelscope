@@ -23,9 +23,32 @@ const getMissionCreatedAt = (mission) => {
     : Number.MAX_SAFE_INTEGER;
 };
 
-export function recoverMissions(missions) {
+export function recoverMissions(missions, queueState = null) {
   if (recoveryCompleted) {
     return 0;
+  }
+
+  if (queueState) {
+    const recoveredActiveMission = queueState.activeMission ?? null;
+    const queuedMissions = Array.isArray(queueState.queuedMissions)
+      ? queueState.queuedMissions
+      : [];
+
+    recoverMissionQueue({
+      activeMission: recoveredActiveMission,
+      queuedMissions,
+    });
+
+    recoveryCompleted = true;
+
+    const recoveredCount =
+      queuedMissions.length + (recoveredActiveMission ? 1 : 0);
+
+    console.info(
+      `[MissionRecovery] Recovered ${recoveredCount} mission(s) from backend queue state`,
+    );
+
+    return recoveredCount;
   }
 
   const recoveredMissions = (Array.isArray(missions) ? missions : [])

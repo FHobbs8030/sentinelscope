@@ -1,5 +1,5 @@
 import {
-  activateNextMission,
+  activateMissionById,
   clearActiveMission,
   getActiveMission,
   getMissionQueue,
@@ -12,13 +12,21 @@ import missionPersistenceReconciler from "./missionPersistenceReconciler";
 import missionStore from "./missionStore";
 import { MISSION_STATES } from "./missionStates";
 
-import scanEventBus, {
-  SCAN_EVENTS,
-} from "../runtime/scanEventBus";
+import scanEventBus, { SCAN_EVENTS } from "../runtime/scanEventBus";
 import scanRuntimeEngine from "../runtime/scanRuntimeEngine";
+import {
+  acquireMissionRuntimeLease,
+  claimNextMission as claimNextMissionRecord,
+} from "../api/missionsApi";
 
 import { emitScanQueueDrained } from "../scanQueueEvents";
+import {
+  clearMissionRuntimeOwned,
+  getRuntimeOwnerId,
+  markMissionRuntimeOwned,
+} from "./runtimeOwnership";
 
+const RUNTIME_LEASE_HEARTBEAT_MS = 2000;
 const SAFETY_PROCESS_INTERVAL_MS = 1000;
 const SCAN_TERMINAL_POLL_MS = 250;
 const MAX_SCAN_WAIT_MS = 60 * 60 * 1000;
@@ -44,15 +52,11 @@ const TERMINAL_MISSION_STATE_BY_SCAN_STATE = {
 };
 
 const getScanIdentifiers = (scan) => {
-  return [scan?.id, scan?.mongoId, scan?._id]
-    .filter(Boolean)
-    .map(String);
+  return [scan?.id, scan?.mongoId, scan?._id].filter(Boolean).map(String);
 };
 
 const getMissionScanIdentifiers = (mission) => {
-  return [mission?.scanId, mission?.scanMongoId]
-    .filter(Boolean)
-    .map(String);
+  return [mission?.scanId, mission?.scanMongoId].filter(Boolean).map(String);
 };
 
 const scanMatchesMission = (scan, mission) => {
@@ -76,16 +80,37 @@ const scanMatchesMission = (scan, mission) => {
   );
 };
 
+const getClaimedMissionId = (mission) => {
+  return mission?.clientMissionId ?? mission?.id ?? mission?._id ?? null;
+};
+
+const buildClaimedMissionUpdates = (mission) => {
+  return {
+    mongoId: mission?.mongoId ?? mission?._id ?? null,
+    state: mission?.state ?? MISSION_STATES.INITIALIZING,
+    progress: mission?.progress ?? 0,
+    scanId: mission?.scanId ?? null,
+    scanMongoId: mission?.scanMongoId ?? null,
+    claimedAt: mission?.claimedAt ?? null,
+  };
+};
+
 class MissionQueueManager {
   constructor() {
     this.running = false;
     this.processingMission = false;
+    this.claimingMission = false;
 
     this.intervalId = null;
     this.processTimerId = null;
 
     this.unsubscribeQueue = null;
     this.unsubscribeTerminalEvents = null;
+
+    this.runtimeLeaseHeartbeatId = null;
+    this.runtimeLeaseMissionId = null;
+    this.runtimeLeaseRenewing = false;
+    this.runtimeOwnerId = getRuntimeOwnerId();
   }
 
   start() {
@@ -136,12 +161,14 @@ class MissionQueueManager {
 
     this.unsubscribeTerminalEvents?.();
     this.unsubscribeTerminalEvents = null;
+    this.stopRuntimeLeaseHeartbeat();
   }
 
   scheduleProcess() {
     if (
       !this.running ||
       this.processingMission ||
+      this.claimingMission ||
       this.processTimerId !== null
     ) {
       return;
@@ -188,11 +215,7 @@ class MissionQueueManager {
 
     const updates = {
       scanId: scan.id ?? mission.scanId ?? null,
-      scanMongoId:
-        scan.mongoId ??
-        scan._id ??
-        mission.scanMongoId ??
-        null,
+      scanMongoId: scan.mongoId ?? scan._id ?? mission.scanMongoId ?? null,
     };
 
     if (terminalMissionState) {
@@ -203,17 +226,13 @@ class MissionQueueManager {
           : (scan.progress ?? mission.progress ?? 0);
     } else {
       updates.state = MISSION_STATES.RUNNING;
-      updates.progress = Math.max(
-        Number(mission.progress) || 0,
-        50,
-      );
+      updates.progress = Math.max(Number(mission.progress) || 0, 50);
     }
 
     missionStore.updateMission(mission.id, updates);
     Object.assign(mission, updates);
 
-    const latestMission =
-      missionStore.getMission(mission.id) ?? mission;
+    const latestMission = missionStore.getMission(mission.id) ?? mission;
 
     await missionPersistenceReconciler.persistLatest(latestMission);
   }
@@ -270,10 +289,7 @@ class MissionQueueManager {
         },
       );
 
-      pollId = window.setInterval(
-        inspectRuntime,
-        SCAN_TERMINAL_POLL_MS,
-      );
+      pollId = window.setInterval(inspectRuntime, SCAN_TERMINAL_POLL_MS);
 
       timeoutId = window.setTimeout(() => {
         if (settled) {
@@ -294,36 +310,160 @@ class MissionQueueManager {
     });
   }
 
+  stopRuntimeLeaseHeartbeat() {
+    if (this.runtimeLeaseHeartbeatId !== null) {
+      window.clearInterval(this.runtimeLeaseHeartbeatId);
+      this.runtimeLeaseHeartbeatId = null;
+    }
+
+    if (this.runtimeLeaseMissionId) {
+      clearMissionRuntimeOwned(this.runtimeLeaseMissionId);
+      this.runtimeLeaseMissionId = null;
+    }
+  }
+
+  async acquireRuntimeOwnership(mission) {
+    if (!mission?.mongoId || !mission?.id) {
+      return false;
+    }
+
+    try {
+      const response = await acquireMissionRuntimeLease(
+        mission.mongoId,
+        this.runtimeOwnerId,
+      );
+
+      const ownsLease =
+        response?.message === "Runtime lease acquired" &&
+        response?.data?.runtimeOwnerId === this.runtimeOwnerId;
+
+      if (!ownsLease) {
+        clearMissionRuntimeOwned(mission.id);
+        return false;
+      }
+
+      markMissionRuntimeOwned(mission.id);
+      this.runtimeLeaseMissionId = mission.id;
+
+      return true;
+    } catch (error) {
+      clearMissionRuntimeOwned(mission.id);
+
+      console.error(
+        `[MissionQueueManager] Failed to acquire runtime ownership for ${mission.target}:`,
+        error,
+      );
+
+      return false;
+    }
+  }
+
+  startRuntimeLeaseHeartbeat(mission) {
+    this.stopRuntimeLeaseHeartbeat();
+
+    markMissionRuntimeOwned(mission.id);
+    this.runtimeLeaseMissionId = mission.id;
+
+    this.runtimeLeaseHeartbeatId = window.setInterval(async () => {
+      if (this.runtimeLeaseRenewing) {
+        return;
+      }
+
+      this.runtimeLeaseRenewing = true;
+
+      try {
+        const stillOwnsRuntime = await this.acquireRuntimeOwnership(mission);
+
+        if (!stillOwnsRuntime) {
+          this.stopRuntimeLeaseHeartbeat();
+
+          scanEventBus.emitTelemetry(
+            `Runtime ownership lost for ${mission.target}`,
+            {
+              source: "mission-queue-manager",
+              missionId: mission.id,
+            },
+          );
+
+          this.scheduleProcess();
+        }
+      } finally {
+        this.runtimeLeaseRenewing = false;
+      }
+    }, RUNTIME_LEASE_HEARTBEAT_MS);
+  }
+
   async processNextMission() {
     if (
       !this.running ||
       this.processingMission ||
+      this.claimingMission ||
       !scanRuntimeEngine.isInitialized()
     ) {
       return;
     }
 
     let mission = getActiveMission();
-    let existingScan = mission
-      ? this.getRuntimeScanForMission(mission)
-      : null;
+    let existingScan = mission ? this.getRuntimeScanForMission(mission) : null;
 
     if (!mission) {
-      const nextMission = getMissionQueue()[0] ?? null;
-
-      if (!nextMission) {
+      if (getMissionQueue().length === 0) {
         return;
       }
 
-      existingScan = this.getRuntimeScanForMission(nextMission);
-
-      if (this.hasRuntimeScanInProgress() && !existingScan) {
+      if (this.hasRuntimeScanInProgress()) {
         return;
       }
 
-      mission = activateNextMission();
+      let claimResponse;
+
+      this.claimingMission = true;
+
+      try {
+        claimResponse = await claimNextMissionRecord();
+      } catch (error) {
+        console.error(
+          "[MissionQueueManager] Failed to claim mission from backend:",
+          error,
+        );
+
+        scanEventBus.emitTelemetry("Backend mission queue claim failed", {
+          source: "mission-queue-manager",
+          error: error?.message ?? "Unknown queue claim failure",
+        });
+
+        return;
+      } finally {
+        this.claimingMission = false;
+      }
+
+      if (claimResponse?.message !== "Mission claimed") {
+        return;
+      }
+
+      const claimedMission = claimResponse?.data ?? null;
+      const claimedMissionId = getClaimedMissionId(claimedMission);
+
+      if (!claimedMission || !claimedMissionId) {
+        console.error(
+          "[MissionQueueManager] Backend claim response did not include a valid mission",
+          claimResponse,
+        );
+
+        return;
+      }
+
+      const claimedMissionUpdates = buildClaimedMissionUpdates(claimedMission);
+
+      missionStore.updateMission(claimedMissionId, claimedMissionUpdates);
+
+      mission = activateMissionById(claimedMissionId, claimedMissionUpdates);
 
       if (!mission) {
+        console.error(
+          `[MissionQueueManager] Backend claimed mission ${claimedMissionId}, but it was not available in the local queue`,
+        );
+
         return;
       }
 
@@ -334,24 +474,37 @@ class MissionQueueManager {
 
     this.processingMission = true;
 
+    const ownsRuntime = await this.acquireRuntimeOwnership(mission);
+
+    if (!ownsRuntime) {
+      this.processingMission = false;
+
+      scanEventBus.emitTelemetry(
+        `Runtime execution deferred for ${mission.target}`,
+        {
+          source: "mission-queue-manager",
+          missionId: mission.id,
+          reason: "runtime-lease-owned-by-another-browser",
+        },
+      );
+
+      return;
+    }
+
+    this.startRuntimeLeaseHeartbeat(mission);
+
     let terminalScan = null;
 
-    scanEventBus.emitTelemetry(
-      `Scan queue activated ${mission.target}`,
-      {
-        source: "mission-queue-manager",
-        missionId: mission.id,
-        recovered: Boolean(mission.queueRecovered),
-        queuedRemaining: getMissionQueueMetrics().queued,
-      },
-    );
+    scanEventBus.emitTelemetry(`Scan queue activated ${mission.target}`, {
+      source: "mission-queue-manager",
+      missionId: mission.id,
+      recovered: Boolean(mission.queueRecovered),
+      queuedRemaining: getMissionQueueMetrics().queued,
+    });
 
     try {
       if (existingScan) {
-        await this.synchronizeMissionWithScan(
-          mission,
-          existingScan,
-        );
+        await this.synchronizeMissionWithScan(mission, existingScan);
 
         scanEventBus.emitTelemetry(
           `Recovered scan queue reattached to ${mission.target}`,
@@ -367,9 +520,7 @@ class MissionQueueManager {
           },
         );
 
-        const existingStatus = String(
-          existingScan.status ?? "",
-        ).toLowerCase();
+        const existingStatus = String(existingScan.status ?? "").toLowerCase();
 
         terminalScan = TERMINAL_SCAN_STATES.has(existingStatus)
           ? existingScan
@@ -391,26 +542,35 @@ class MissionQueueManager {
       }
 
       if (terminalScan && mission.queueRecovered) {
-        await this.synchronizeMissionWithScan(
-          mission,
-          terminalScan,
-        );
+        await this.synchronizeMissionWithScan(mission, terminalScan);
       }
 
-      scanEventBus.emitTelemetry(
-        `Queued scan finished for ${mission.target}`,
-        {
-          source: "mission-queue-manager",
-          missionId: mission.id,
-          scanId:
-            terminalScan?.mongoId ??
-            terminalScan?._id ??
-            terminalScan?.id ??
-            null,
-          status: terminalScan?.status ?? "unknown",
-          queuedRemaining: getMissionQueueMetrics().queued,
-        },
-      );
+      if (terminalScan) {
+        const terminalPersisted = await scanRuntimeEngine.persistScan(
+          terminalScan,
+          {
+            force: true,
+          },
+        );
+
+        if (!terminalPersisted) {
+          throw new Error(
+            `Failed to confirm terminal scan persistence for ${mission.target}.`,
+          );
+        }
+      }
+
+      scanEventBus.emitTelemetry(`Queued scan finished for ${mission.target}`, {
+        source: "mission-queue-manager",
+        missionId: mission.id,
+        scanId:
+          terminalScan?.mongoId ??
+          terminalScan?._id ??
+          terminalScan?.id ??
+          null,
+        status: terminalScan?.status ?? "unknown",
+        queuedRemaining: getMissionQueueMetrics().queued,
+      });
     } catch (error) {
       console.error(
         `[MissionQueueManager] Failed processing ${mission.target}:`,
@@ -426,6 +586,7 @@ class MissionQueueManager {
         },
       );
     } finally {
+      this.stopRuntimeLeaseHeartbeat();
       clearActiveMission(mission.id);
       this.processingMission = false;
 
