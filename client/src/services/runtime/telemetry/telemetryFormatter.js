@@ -1,3 +1,5 @@
+import { createClientId } from "../../../utils/createClientId";
+
 import {
   TELEMETRY_EVENT_CONFIG,
   TELEMETRY_LEVELS,
@@ -13,7 +15,7 @@ export function createTelemetryEntry({
   metadata = {},
 }) {
   return {
-    id: crypto.randomUUID(),
+    id: createClientId(),
 
     level,
 

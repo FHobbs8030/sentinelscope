@@ -117,10 +117,25 @@ function RecentScansPanel({ focusType, focusId, onViewScan }) {
     document.documentElement.dataset.motion === "reduced" ||
     (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
 
-  visibleTarget.scrollIntoView({
-    behavior: prefersReducedMotion ? "auto" : "smooth",
-    block: "center",
-  });
+  const isMobileViewport =
+    window.matchMedia?.("(max-width: 900px)").matches ?? false;
+
+  if (isMobileViewport) {
+    const scanner = document.querySelector(".sentinel-pulse-scanner");
+    const scannerBottom = scanner?.getBoundingClientRect().bottom ?? 0;
+    const targetTop = visibleTarget.getBoundingClientRect().top;
+    const mobileClearance = 12;
+
+    window.scrollBy({
+      top: targetTop - (scannerBottom + mobileClearance),
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+    });
+  } else {
+    visibleTarget.scrollIntoView({
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+      block: "center",
+    });
+  }
 
   /*
     URL-driven focus remains active while ?focus=scan&id=... is present.

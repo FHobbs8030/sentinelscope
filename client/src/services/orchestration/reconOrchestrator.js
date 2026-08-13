@@ -1,3 +1,5 @@
+import { createClientId } from "../../utils/createClientId";
+
 import {
   enqueueMission,
   removeMissionFromQueue,
@@ -13,7 +15,7 @@ import missionPersistenceReconciler from "./missionPersistenceReconciler";
 
 export function createMission({ target, type, profile, severity }) {
   return {
-    id: crypto.randomUUID(),
+    id: createClientId(),
 
     target,
 

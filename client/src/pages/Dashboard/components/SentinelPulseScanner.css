@@ -463,6 +463,8 @@
 
 @media (max-width: 640px) {
   .sentinel-pulse-scanner {
+    --scanner-sweep-duration: 1.35s;
+    --scanner-breathe-duration: 1.9s;
     --scanner-rail-inset: 8px;
 
     padding: 6px var(--space-3);

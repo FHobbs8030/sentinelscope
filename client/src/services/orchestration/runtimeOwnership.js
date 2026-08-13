@@ -1,9 +1,11 @@
+import { createClientId } from "../../utils/createClientId";
+
 let memoryRuntimeOwnerId = null;
 
 const ownedMissionIds = new Set();
 
 function createRuntimeOwnerId() {
-  return `runtime-${crypto.randomUUID()}`;
+  return `runtime-${createClientId()}`;
 }
 
 export function getRuntimeOwnerId() {

@@ -1,3 +1,5 @@
+import { createClientId } from "../../utils/createClientId";
+
 export const SCAN_EVENTS = {
   SCAN_CREATED: "SCAN_CREATED",
   SCAN_STARTED: "SCAN_STARTED",
@@ -182,7 +184,7 @@ class ScanEventBus {
   }
 
   generateEventId() {
-    return `evt-${crypto.randomUUID()}`;
+    return `evt-${createClientId()}`;
   }
 }
 

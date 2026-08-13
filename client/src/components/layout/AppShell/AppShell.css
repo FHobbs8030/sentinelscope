@@ -140,6 +140,7 @@
 
 .app-shell[data-sidebar="open"] .topbar-workspace,
 .app-shell[data-sidebar="open"] .topbar-search,
+.app-shell[data-sidebar="open"] .topbar-backend-status,
 .app-shell[data-sidebar="open"] .topbar-icon-button,
 .app-shell[data-sidebar="open"] .topbar-user {
   visibility: hidden;
