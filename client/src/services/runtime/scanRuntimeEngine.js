@@ -1,3 +1,5 @@
+import { createClientId } from "../../utils/createClientId";
+
 import missionStore from "../orchestration/missionStore";
 import {
   SCAN_STATE_METADATA,
@@ -313,7 +315,7 @@ class ScanRuntimeEngine {
     const runtimeScan = {
       ...scan,
 
-      id: scan.id ?? `scan-${crypto.randomUUID()}`,
+      id: scan.id ?? `scan-${createClientId()}`,
 
       mongoId: scan.mongoId ?? null,
 
@@ -759,7 +761,7 @@ class ScanRuntimeEngine {
           },
           () => {
             return {
-              clientFindingId: crypto.randomUUID(),
+              clientFindingId: createClientId(),
 
               scanId: updatedScan.mongoId,
 
