@@ -16,9 +16,38 @@ import scanEventBus, {
 const DESKTOP_SCAN_PAGE_SIZE = 15;
 const MOBILE_SCAN_PAGE_SIZE = 5;
 const NEW_SCAN_FOCUS_DURATION_MS = 7000;
+const ORIENTATION_REALIGN_DELAY_MS = 300;
+const SCANNER_FOCUS_CLEARANCE_PX = 12;
+
+const ORIENTATION_PINNED_SCAN_STATES = new Set([
+  "queued",
+  "initializing",
+  "running",
+  "recon",
+  "enumeration",
+  "analysis",
+  "exploitation",
+  "reporting",
+]);
 
 const getStableScanKey = (scan, index) => {
   return getStableScanId(scan) || `scan-${index}`;
+};
+
+const positionTargetBelowScanner = (target, behavior = "auto") => {
+  const scanner = document.querySelector(".sentinel-pulse-scanner");
+
+  if (!scanner || !target) {
+    return;
+  }
+
+  const scannerBottom = scanner.getBoundingClientRect().bottom;
+  const targetTop = target.getBoundingClientRect().top;
+
+  window.scrollBy({
+    top: targetTop - (scannerBottom + SCANNER_FOCUS_CLEARANCE_PX),
+    behavior,
+  });
 };
 
 function RecentScansPanel({ focusType, focusId, onViewScan }) {
@@ -42,6 +71,18 @@ function RecentScansPanel({ focusType, focusId, onViewScan }) {
     focusType === "scan" && focusId ? String(focusId) : null;
 
   const effectiveFocusedScanId = externalFocusedScanId || focusedScanId;
+
+  const orientationPinnedScan =
+    scans.find((scan) => {
+      const status = (scan.status || "").toLowerCase();
+
+      return status !== "queued" && ORIENTATION_PINNED_SCAN_STATES.has(status);
+    }) ??
+    scans.find((scan) => (scan.status || "").toLowerCase() === "queued");
+
+  const orientationPinnedScanId = orientationPinnedScan
+    ? getStableScanId(orientationPinnedScan)
+    : null;
 
   useEffect(() => {
     const unsubscribe = scanEventBus.subscribe(
@@ -118,18 +159,13 @@ function RecentScansPanel({ focusType, focusId, onViewScan }) {
     (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
 
   const isMobileViewport =
-    window.matchMedia?.("(max-width: 900px)").matches ?? false;
+    window.matchMedia?.("(max-width: 1100px)").matches ?? false;
 
   if (isMobileViewport) {
-    const scanner = document.querySelector(".sentinel-pulse-scanner");
-    const scannerBottom = scanner?.getBoundingClientRect().bottom ?? 0;
-    const targetTop = visibleTarget.getBoundingClientRect().top;
-    const mobileClearance = 12;
-
-    window.scrollBy({
-      top: targetTop - (scannerBottom + mobileClearance),
-      behavior: prefersReducedMotion ? "auto" : "smooth",
-    });
+    positionTargetBelowScanner(
+      visibleTarget,
+      prefersReducedMotion ? "auto" : "smooth",
+    );
   } else {
     visibleTarget.scrollIntoView({
       behavior: prefersReducedMotion ? "auto" : "smooth",
@@ -175,6 +211,80 @@ function RecentScansPanel({ focusType, focusId, onViewScan }) {
     scans,
     effectiveVisibleMobileScanCount,
   ]);
+
+  useEffect(() => {
+    if (!orientationPinnedScanId) {
+      return undefined;
+    }
+
+    const orientationQuery = window.matchMedia?.("(orientation: portrait)");
+
+    if (!orientationQuery) {
+      return undefined;
+    }
+
+    let realignTimerId = null;
+    let animationFrameId = null;
+
+    const realignPinnedScan = () => {
+      const isTabletViewport =
+        window.matchMedia?.("(max-width: 1100px)").matches ?? false;
+
+      if (!isTabletViewport) {
+        return;
+      }
+
+      if (realignTimerId) {
+        window.clearTimeout(realignTimerId);
+      }
+
+      if (animationFrameId) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+
+      realignTimerId = window.setTimeout(() => {
+        animationFrameId = window.requestAnimationFrame(() => {
+          const scanTargets =
+            panelRef.current?.querySelectorAll("[data-scan-id]");
+
+          const visibleTarget = Array.from(scanTargets || []).find(
+            (element) =>
+              element.dataset.scanId === String(orientationPinnedScanId) &&
+              element.getClientRects().length > 0,
+          );
+
+          if (visibleTarget) {
+            positionTargetBelowScanner(visibleTarget);
+          }
+
+          animationFrameId = null;
+          realignTimerId = null;
+        });
+      }, ORIENTATION_REALIGN_DELAY_MS);
+    };
+
+    if (orientationQuery.addEventListener) {
+      orientationQuery.addEventListener("change", realignPinnedScan);
+    } else {
+      orientationQuery.addListener?.(realignPinnedScan);
+    }
+
+    return () => {
+      if (orientationQuery.removeEventListener) {
+        orientationQuery.removeEventListener("change", realignPinnedScan);
+      } else {
+        orientationQuery.removeListener?.(realignPinnedScan);
+      }
+
+      if (realignTimerId) {
+        window.clearTimeout(realignTimerId);
+      }
+
+      if (animationFrameId) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [orientationPinnedScanId]);
 
   const baseDesktopScans = scans.slice(0, visibleDesktopScanCount);
 
@@ -367,6 +477,7 @@ function RecentScansPanel({ focusType, focusId, onViewScan }) {
                     isFocusedScan ? " scan-new-focus" : ""
                   }`}
                   data-new-scan-focus={isFocusedScan ? "true" : undefined}
+                  data-scan-id={getStableScanId(scan) || undefined}
                 >
                   <td
                     className="scan-table-cell target-cell"
@@ -495,6 +606,7 @@ function RecentScansPanel({ focusType, focusId, onViewScan }) {
                 isFocusedScan ? " scan-new-focus" : ""
               }`}
               data-new-scan-focus={isFocusedScan ? "true" : undefined}
+              data-scan-id={getStableScanId(scan) || undefined}
             >
               <div className="mobile-scan-target" title={scan.target}>
                 {scan.target}
